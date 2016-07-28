@@ -1,4 +1,3 @@
-from collections import Counter
 import pandas as pd
 import datetime
 import time
@@ -6,6 +5,8 @@ import numpy as np
 import sys
 import random
 import re
+from joblib import Parallel, delayed
+import multiprocessing
 
 # Constants
 # ---------
@@ -13,11 +14,11 @@ import re
 # Configure these to fit your environment.
 
 # desired rate per second
-TARGET_RATE = 1000
-#TARGET_RATE = 300000
+#TARGET_RATE = 1000
+TARGET_RATE = 300000
 
 # small sampling
-NLINES = 1000
+NLINES = 100000
 
 # 1/3 of file (approx 36279156 lines total)
 #NLINES = 12093052
@@ -40,7 +41,7 @@ N_RECV_LOWER = 1
 N_RECV_UPPER = 3
 
 # trades input file
-INPUT_FILE = "taqtrade20131218"
+INPUT_FILE = "/home/mapr/nyse/taqtrade20131218"
 
 # directory for per-second output files
 OUTPUT_DIR = "/home/mapr/nyse/data"
@@ -106,15 +107,7 @@ def get_row_date_dt(row):
         (strdate[0:2], strdate[2:4], strdate[4:6])
     return (datetime.datetime.strptime(fullstr, "%d/%m/%y %H:%M:%S"))
 
-# fill this second with bid/asks
-def fill_bid_ask(df, indices, starttime):
-    # get all the trades for which we are generating bid/asks
-    trades = df.iloc[indices]
-    allsyms = trades['symbol']
-    tstr = starttime.strftime("%H%M%S%F")
-    newents = []
-    i = 0
-    while (i < TARGET_RATE):
+def make_bid_ask(send_id, send_p, recv_id, recv_p, trades, types, tstr):
         # these are currently disjoint sets so we don't
         # check for the same recv/sender id
         n_recv = random.randint(N_RECV_LOWER, N_RECV_UPPER)
@@ -137,17 +130,26 @@ def fill_bid_ask(df, indices, starttime):
         # and remove the decimal
         newpr = re.sub('\.', '', newpr)
 
-        # add it to the list
-        nr = make_ent(tstr, tt.exchange,
+        # add this new bid or ask
+        return (make_ent(tstr, tt.exchange,
                 tt.symbol, ty, tt.saleCondition, newvol, newpr,
                 tt.tradeStopStockIndicator, tt.tradeCorrectionIndicator,
                 tt.tradeSequenceNumber, tt.tradeSource,
                 tt.tradeReportingFacility,
                 sid,
-                rids)
-        newents.append(nr)
-        #print 'adding row %s' % str(nr)
-        i += 1
+                rids))
+        # print 'adding row %s' % str(nr)
+
+# fill this second with bid/asks
+def fill_bid_ask(df, indices, starttime):
+    # get all the trades for which we are generating bid/asks
+    trades = df.iloc[indices]
+    tstr = starttime.strftime("%H%M%S%F")
+    nc = multiprocessing.cpu_count()
+    print "parallelizing to %d jobs" % nc
+    newents = Parallel(verbose=True, n_jobs=nc)(delayed(make_bid_ask)(send_id,
+             send_p, recv_id, recv_p, trades, types, tstr) for i in range(0, TARGET_RATE))
+
     return (pd.DataFrame(newents))
 
 def parse(line):
