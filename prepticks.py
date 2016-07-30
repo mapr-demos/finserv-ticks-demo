@@ -145,7 +145,7 @@ def fill_bid_ask(df, indices, starttime):
     # get all the trades for which we are generating bid/asks
     trades = df.iloc[indices]
     tstr = starttime.strftime("%H%M%S%F")
-    nc = multiprocessing.cpu_count()
+    nc = multiprocessing.cpu_count() / 2
     print "parallelizing to %d jobs" % nc
     newents = Parallel(verbose=True, n_jobs=nc)(delayed(make_bid_ask)(send_id,
              send_p, recv_id, recv_p, trades, types, tstr) for i in range(0, TARGET_RATE))
@@ -171,13 +171,16 @@ def parse(line):
         raise ValueError("Expected line to be 73 characters, got " + str(len(line)))
     return r
 
-
-def output_trades(df, bdf, secid):
+def output_trades(df, bdf, secid, seq):
     ss = secid.strftime("%H%M%S")
     fn = "%s/%s" % (OUTPUT_DIR, ss)
 
     # merge and sort the bid/asks with the actual trades, by time
     combodf = bdf.append(df[df.date.str[:6] == ss]).sort_values(['date'], ascending=1)
+
+    # assign seq numbers
+    combodf.tradeSequenceNumber = [ format(x, '016d') for x in range(seq, seq + len(combodf.index)) ]
+    seq += len(combodf.index)
 
     print "writing file %s" % fn
     with open(fn, "w") as output:
@@ -198,6 +201,7 @@ def output_trades(df, bdf, secid):
                     output.write("%s" % ent)
             output.write('\n')
     output.close()
+    return (seq)
 
 i = 0
 dlines = []
@@ -233,11 +237,11 @@ endent = df.iloc[-1]
 ftime = get_row_date_dt(firstent)
 endtime = get_row_date_dt(endent)
 wsec = ftime - datetime.timedelta(minutes=BID_ASK_START)
-curidx = 0
+seq = curidx = 0
 
 print "making bid/asks..."
 while (wsec <= endtime):
-    print "time %s" % str(wsec)
+    print "time %s seq %d" % (str(wsec), seq)
     curidx, windowidx = move_window(df, curidx, windowidx, wsec)
     # print "new window size %d" % len(windowidx)
 
@@ -247,14 +251,14 @@ while (wsec <= endtime):
     # use the whole file)
     while (len(windowidx) == 0):
         print "backfilling from row %s" % df[curidx]
-        output_trades(df, fill_bid_ask(df, [ df[curidx] ], wsec), wsec)
+        seq = output_trades(df, fill_bid_ask(df, [ df[curidx] ], wsec), wsec, seq)
         wsec += datetime.timedelta(seconds=1)
         print "new time %s" % str(wsec)
         curidx, windowidx = move_window(df, curidx, windowidx, wsec)
 
     # write the bids, asks, and trades for this second
-    output_trades(df,
-        fill_bid_ask(df, [i for we in windowidx for i in we], wsec), wsec)
+    seq = output_trades(df,
+        fill_bid_ask(df, [i for we in windowidx for i in we], wsec), wsec, seq)
 
     # move to the next second
     wsec += datetime.timedelta(seconds=1)
