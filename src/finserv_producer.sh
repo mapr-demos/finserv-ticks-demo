@@ -1,0 +1,1 @@
+ls -1 ~/nyse/data/* | while read line; do java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run producer data/$line /user/mapr/taq:trades; done
