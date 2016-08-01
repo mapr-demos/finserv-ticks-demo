@@ -73,7 +73,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.mapr.examples.Run</mainClass>
+                            <mainClass>com.mapr.demo.finserv.Run</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>

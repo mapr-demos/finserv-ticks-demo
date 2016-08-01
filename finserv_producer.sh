@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 export DATA=/home/mapr/nyse/data
 export STREAM=/usr/mapr/taq
 export TOPIC=taq
