@@ -49,7 +49,7 @@ public class Producer {
                 {
                     last_update ++;
                     producer.flush();
-                    Monitor.print_status(records_processed, 1, startTime);
+                    print_status(records_processed, 1, startTime);
                 }
                 line = reader.readLine();
             }
@@ -72,10 +72,15 @@ public class Producer {
                 "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer",
                 "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("auto.create.topics.enable", true);
-        System.out.println("auto.create.topics.enable = " + props.getProperty("auto.create.topics.enable"));
 
         producer = new KafkaProducer<String, String>(props);
     }
 
+    public static void print_status(long records_processed, int poolSize, long startTime) {
+        long elapsedTime = System.nanoTime() - startTime;
+        System.out.printf("Throughput = %.2f Kmsgs/sec published. Threads = %d. Total published = %d.\n",
+                records_processed / ((double) elapsedTime / 1000000000.0) / 1000,
+                poolSize,
+                records_processed);
+    }
 }

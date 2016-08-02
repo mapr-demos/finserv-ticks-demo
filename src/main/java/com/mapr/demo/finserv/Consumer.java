@@ -39,7 +39,7 @@ public class Consumer {
         CompletionService<Boolean> parserService = new ExecutorCompletionService(es);
 
         List<ConsumerRecord> recordList = new ArrayList();
-        long pollTimeOut = 10000;  // milliseconds
+        long pollTimeOut = 1000;  // milliseconds
         //collect the processing result
         List<Boolean> resultList = new ArrayList();
 
@@ -57,6 +57,7 @@ public class Consumer {
                 ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
                 if (records.count() == 0) {
                     System.out.println("No messages after " + pollTimeOut/1000 + " second wait. Total published = " + resultList.size());
+                    Monitor.print_status(resultList.size(), poolSize, startTime);
                 } else {
 
                     for (ConsumerRecord<String, String> record : records) {
@@ -68,7 +69,7 @@ public class Consumer {
                             recordList.forEach(recordToProcess -> parserService.submit(new ParsingWorker(recordToProcess)));
                             while (taskCount > 0) {
                                 try {
-                                    Future<Boolean> futureResult = parserService.poll(100, TimeUnit.MILLISECONDS);
+                                    Future<Boolean> futureResult = parserService.take();
                                     if (futureResult != null) {
                                         boolean result = futureResult.get().booleanValue();
                                         resultList.add(result);
