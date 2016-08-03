@@ -3,14 +3,19 @@ package com.mapr.demo.finserv;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
+
 import java.io.IOException;
 import java.util.Properties;
 
 public class Producer {
 
     public static KafkaProducer producer;
+    static long records_processed = 0L;
 
     public static void main(String[] args) throws IOException {
         if (args.length < 3) {
@@ -31,7 +36,7 @@ public class Producer {
         FileReader fr = new FileReader(f);
         BufferedReader reader = new BufferedReader(fr);
         String line = reader.readLine();
-        long records_processed = 0L;
+
 
         try {
             long startTime = System.nanoTime();
@@ -41,8 +46,16 @@ public class Producer {
                 ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topic, line);
 
                 // Send the record to the producer client library.
-                producer.send(rec);
-                records_processed++;
+//                producer.send(rec);
+                producer.send(rec,
+                        new Callback() {
+                            public void onCompletion(RecordMetadata metadata, Exception e) {
+                                records_processed++;
+                                if(e != null)
+                                    e.printStackTrace();
+                            }
+                        });
+
 
                 // Print performance stats once per second
                 if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update)
@@ -57,6 +70,12 @@ public class Producer {
         } catch (Throwable throwable) {
             System.err.printf("%s", throwable.getStackTrace());
         } finally {
+            producer.flush();
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             producer.close();
             System.out.println("Published " + records_processed + " messages to stream.");
             System.out.println("Finished.");

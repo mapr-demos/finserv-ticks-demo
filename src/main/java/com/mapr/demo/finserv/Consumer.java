@@ -4,18 +4,28 @@ import java.text.ParseException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.IntStream;
 
 public class Consumer {
 
+
     // Declare a new consumer.
     public static KafkaConsumer consumer;
+    public static KafkaConsumer jsonconsumer;
     public static KafkaProducer producer;
     public static long json_messages_published = 0L;
+    public static long json_messages_max_delay = 0L;
+    public static long records_processed = 0L;
+    static long startTime;
+    static long last_update;
 
     private static JSONObject parse(String record) throws ParseException {
         if (record.length() < 71) {
@@ -52,6 +62,7 @@ public class Consumer {
 
     public static void main(String[] args) {
         Runtime runtime = Runtime.getRuntime();
+
         if (args.length < 2) {
             System.err.println("ERROR: You must specify a stream:topic to consume data from.");
             System.err.println("USAGE:\n" +
@@ -72,38 +83,37 @@ public class Consumer {
         // Subscribe to the topic.
         consumer.subscribe(topics);
 
-        List<String> buffer = new ArrayList<>();
+
         long pollTimeOut = 1000;  // milliseconds
-        long records_processed = 0L;
-        final int minBatchSize = 200;
+
 
         // https://kafka.apache.org/090/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
         // This paradigm is an "at least once delivery" guarantee.
         // TODO: Is it okay for the listener #1 to potentially persist duplicate messages?
 
-        long startTime = System.nanoTime();
-        long last_update = 0;
+        startTime = System.nanoTime();
+        last_update = 0;
 
         try {
             while (true) {
                 // Request unread messages from the topic.
                 ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
                 if (records.count() == 0) {
-                    System.out.println("No messages after " + pollTimeOut/1000 + " second wait. Total published = " + records_processed);
+                    System.out.println("No messages after " + pollTimeOut/1000 + " second wait. Total raw consumed = " +
+                            records_processed + ". Total JSON published " + json_messages_published +
+                            ". Max delay = " + json_messages_max_delay/1e9 + "s");
+
+                    producer.flush();
+
                 } else {
 
                     for (ConsumerRecord<String, String> record : records) {
-                        buffer.add(record.value());
-                    }
-                    if (buffer.size() >= minBatchSize) {
-                        for (String msg : buffer) {
-                            JSONObject json = parse(msg);
-                            streamJSON(json);
-                        }
+                        records_processed++;
+                        JSONObject json = parse(record.value());
+                        streamJSON(json);
                         consumer.commitSync();
-                        buffer.clear();
                     }
-                    records_processed += records.count();
+
 
                     // Print performance stats once per second
                     if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update) {
@@ -113,7 +123,32 @@ public class Consumer {
 
                 }
 
+//                ConsumerRecords<String, String> jsonrecords = jsonconsumer.poll(pollTimeOut);
+//                if (jsonrecords.count() == 0) {
+//                    System.out.println("No json messages after " + pollTimeOut/1000 + " second wait. Total published = " + records_processed);
+//                } else {
+//
+//                    for (ConsumerRecord<String, String> record : records) {
+//                        jsonbuffer.add(record.value());
+//                    }
+//                    if (jsonbuffer.size() >= minBatchSize) {
+//                        for (String msg : jsonbuffer) {
+//                            System.out.println("JSON: " + msg);
+//                        }
+//                        jsonconsumer.commitSync();
+//                        jsonbuffer.clear();
+//                    }
+//
+//                    // Print performance stats once per second
+//                    if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update) {
+//                        last_update++;
+//                        Monitor.print_status(records_processed, 1, startTime);
+//                    }
+//
+//                }
+
             }
+
         } catch (Throwable throwable) {
             System.err.printf("%s", throwable.getStackTrace());
         } finally {
@@ -128,10 +163,33 @@ public class Consumer {
         String sender = (String)json.get("sender");
         String topic = "/user/mapr/taq:"+json.get("sender");
 
-        json_messages_published++;
-
         ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topic, json.toString());
-        producer.send(rec);
+        long send_time = System.nanoTime();
+        // Non-blocking send. Callback invoked when request is complete.
+        producer.send(rec,
+                    new Callback() {
+                        public void onCompletion(RecordMetadata metadata, Exception e) {
+                            long current_time = System.nanoTime();
+                            json_messages_published++;
+                            if (json_messages_max_delay < (current_time-send_time))
+                                json_messages_max_delay = current_time-send_time;
+                            if(e != null)
+                                e.printStackTrace();
+                        }
+                    });
+
+
+        // Print performance stats once per second
+        if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update)
+        {
+            last_update ++;
+            producer.flush();
+            long elapsedTime = System.nanoTime() - startTime;
+            System.out.printf("JSON messages published = %d. Max delay = %.2fs. Thruput = %.2f Kmsgs/sec\n", json_messages_published,
+                    json_messages_max_delay/1e9,
+                    json_messages_published / ((double) elapsedTime / 1e9) / 1000);
+        }
+
     }
 
     public static void configureProducer() {
@@ -156,6 +214,7 @@ public class Consumer {
                 "org.apache.kafka.common.serialization.StringDeserializer");
 
         consumer = new KafkaConsumer<String, String>(props);
+        jsonconsumer = new KafkaConsumer<String, String>(props);
     }
 
 }
