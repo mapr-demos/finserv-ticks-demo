@@ -43,11 +43,13 @@ public class Producer {
             long last_update = 0;
 
             while (line != null) {
-                ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topic, line);
+
+                String key = Long.toString(System.nanoTime());
+                ProducerRecord<String, String> record = new ProducerRecord<String, String>(topic, key, line);
 
                 // Send the record to the producer client library.
 //                producer.send(rec);
-                producer.send(rec,
+                producer.send(record,
                         new Callback() {
                             public void onCompletion(RecordMetadata metadata, Exception e) {
                                 records_processed++;

@@ -49,15 +49,23 @@ public class BasicConsumerRelay {
         // Subscribe to the topic.
         consumer.subscribe(topics);
         long pollTimeOut = 1000;  // milliseconds
-
+        boolean printme = false;
         try {
             while (true) {
                 // Request unread messages from the topic.
                 ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
+                if (records.count() == 0) {
+                    if (printme) {
+                        producer.flush();
+                        System.out.println("\nNo messages after " + pollTimeOut / 1000 + "s. Total msgs relayed = " +
+                                records_processed);
+                        printme = false;
+                    }
+                }
                 if (records.count() > 0) {
+                    printme = true;
                     for (ConsumerRecord<String, String> record : records) {
                         long current_time = System.nanoTime();
-                        int i = record.value().indexOf(' ');
 
                         if (VERBOSE) {
                             System.out.printf("\tconsumed: '%s'\n" +
@@ -66,8 +74,8 @@ public class BasicConsumerRelay {
                                             "\t\tpartition = %d\n" +
                                             "\t\tkey = %s\n" +
                                             "\t\toffset = %d\n",
-                                    record.value().substring(i+1),
-                                    (current_time - Long.valueOf(record.value().substring(0,i)))/1e9,
+                                    record.value(),
+                                    (current_time - Long.valueOf(record.key()))/1e9,
                                     record.topic(),
                                     record.partition(),
                                     record.key(),
@@ -76,11 +84,10 @@ public class BasicConsumerRelay {
                             System.out.println("\t\tRelaying to topic " + topic2);
                         }
 
-                        String input = record.value().substring(i+1);
-                        String key = "relaykeyid";
-                        long send_time = System.nanoTime();
-                        String value = send_time + " " + input;
-                        ProducerRecord rec = new ProducerRecord(topic2,key,value);
+                        String value2 = record.value();
+                        String key2 = record.key();  // assumed to be timestamp of original message
+
+                        ProducerRecord rec = new ProducerRecord(topic2,key2,value2);
                         producer.send(rec,
                                 new Callback() {
                                     public void onCompletion(RecordMetadata metadata, Exception e) {
@@ -94,8 +101,8 @@ public class BasicConsumerRelay {
                                                             "\t\ttopic = %s\n" +
                                                             "\t\tpartition = %d\n" +
                                                             "\t\toffset = %d\n",
-                                                    input,
-                                                    (current_time - send_time) / 1e9,
+                                                    value2,
+                                                    (current_time - Long.valueOf(key2)) / 1e9,
                                                     metadata.topic(),
                                                     metadata.partition(), metadata.offset());
                                             System.out.println("\t\tTotal records published : " + records_processed);
@@ -103,13 +110,10 @@ public class BasicConsumerRelay {
                                     }
                                 });
 
-                        if (input.equals("q")) {
-//                            consumer.close();
+                        if (value2.equals("q")) {
                             producer.flush();
-                            producer.close();
                             System.out.println("\nRelayed " + records_processed + " messages from " + topic1 + " to " + topic2);
-//                            System.out.println("Exit!");
-//                            System.exit(0);
+                            records_processed = 0;
                         }
 
                         consumer.commitSync();

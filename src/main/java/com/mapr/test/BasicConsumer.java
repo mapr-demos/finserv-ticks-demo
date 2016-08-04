@@ -29,34 +29,53 @@ public class BasicConsumer {
         if (args.length < 1) {
             System.err.println("ERROR: You must specify the stream:topic.");
             System.err.println("USAGE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.BasicConsumer stream:topic [verbose]\n" +
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.BasicConsumer stream:topic1 [stream:topic_n] [verbose]\n" +
                     "EXAMPLE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.BasicConsumerRelay /user/mapr/taq:test02");
-
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.BasicConsumerRelay /user/mapr/taq:test01 /user/mapr/taq:test02 /user/mapr/taq:test03 verbose");
         }
 
-        String topic = args[0];
-        System.out.println("Consuming from stream: " + topic);
+        List<String> topics = new ArrayList<String>();
+        System.out.println("Consuming from streams:");
+        for (int i=0; i<args.length-1; i++) {
+            String topic = args[i];
+            topics.add(topic);
+            System.out.println("\t" + topic);
+        }
 
-        if (args.length == 2 && "verbose".equals(args[1])) VERBOSE=true;
+        if ("verbose".equals(args[args.length-1])) VERBOSE=true;
+        else {
+            String topic = args[args.length-1];
+            topics.add(topic);
+            System.out.println("\t" + topic);
+        }
 
         configureConsumer();
 
-        List<String> topics = new ArrayList<String>();
-        topics.add(topic);
-        // Subscribe to the topic.
         consumer.subscribe(topics);
         long pollTimeOut = 1000;  // milliseconds
-
+        boolean printme = false;
+        long timer = 0;
         try {
             while (true) {
                 // Request unread messages from the topic.
                 ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
+                if (records.count() == 0) {
+                    double elapsed_time = (System.nanoTime() - timer)/1e9;
+                    if (printme) {
+                        System.out.println("\nNo messages after " + pollTimeOut / 1000 + "s. Total msgs consumed = " +
+                                records_processed + " over " + elapsed_time + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s");
+                        printme = false;
+                    }
+                }
                 if (records.count() > 0) {
+                    if (printme == false) {
+                        timer = System.nanoTime();
+                    }
+                    printme = true;
                     for (ConsumerRecord<String, String> record : records) {
+                        System.out.print(".");
                         records_processed++;
                         long current_time = System.nanoTime();
-                        int i = record.value().indexOf(' ');
                         System.out.print(".");
 
                         if (VERBOSE) {
@@ -66,8 +85,8 @@ public class BasicConsumer {
                                             "\t\tpartition = %d\n" +
                                             "\t\tkey = %s\n" +
                                             "\t\toffset = %d\n",
-                                    record.value().substring(i+1),
-                                    (current_time - Long.valueOf(record.value().substring(0,i)))/1e9,
+                                    record.value(),
+                                    (current_time - Long.valueOf(record.key()))/1e9,
                                     record.topic(),
                                     record.partition(),
                                     record.key(),
@@ -75,11 +94,9 @@ public class BasicConsumer {
                             System.out.println("\t\tTotal records consumed : " + records_processed);
                         }
 
-                        if (record.value().substring(i+1).equals("q")) {
+                        if (record.value().equals("q")) {
                             System.out.println("\nConsumed " + records_processed + " messages from stream.");
-//                            System.out.println("Exit!");
-//                            consumer.commitSync();
-//                            System.exit(0);
+                            records_processed = 0;
                         }
                         consumer.commitSync();
                     }

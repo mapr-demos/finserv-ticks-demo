@@ -48,16 +48,10 @@ public class BasicProducer {
 
             while (true) {
 
-                String input = br.readLine();
-                if (input == null) break;
+                String value = br.readLine();
+                if (value == null) break;
 
-//                System.out.println("Sending : " + input);
-//                System.out.println("-----------");
-
-//                ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topic, input);
-                String key = "mykeyid";
-                long send_time = System.nanoTime();
-                String value = send_time + " " + input;
+                String key = Long.toString(System.nanoTime());
                 ProducerRecord rec = new ProducerRecord(topic,key,value);
                 producer.send(rec,
                         new Callback() {
@@ -72,8 +66,8 @@ public class BasicProducer {
                                                     "\t\ttopic = %s\n" +
                                                     "\t\tpartition = %d\n" +
                                                     "\t\toffset = %d\n",
-                                            input,
-                                            (current_time - send_time) / 1e9,
+                                            value,
+                                            (current_time - Long.valueOf(key))/1e9,
                                             metadata.topic(),
                                             metadata.partition(), metadata.offset());
                                     System.out.println("\t\tTotal records published : " + records_processed);
@@ -81,7 +75,7 @@ public class BasicProducer {
                             }
                         });
 
-                if ("q".equals(input)) {
+                if ("q".equals(value)) {
                     System.out.println("Exit!");
                     break;
                 }
