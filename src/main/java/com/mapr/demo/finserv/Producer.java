@@ -73,12 +73,12 @@ public class Producer {
             System.err.printf("%s", throwable.getStackTrace());
         } finally {
             producer.flush();
+            producer.close();
             try {
-                Thread.sleep(1000);
+                Thread.sleep(5000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            producer.close();
             System.out.println("Published " + records_processed + " messages to stream.");
             System.out.println("Finished.");
         }

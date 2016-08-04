@@ -52,31 +52,42 @@ public class BasicConsumer {
         configureConsumer();
 
         consumer.subscribe(topics);
-        long pollTimeOut = 1000;  // milliseconds
+        long pollTimeOut = 5000;  // milliseconds
         boolean printme = false;
-        long timer = 0;
+        long start_time = 0;
+        long last_update = 0;
+        double latency_total = 0;
         try {
             while (true) {
                 // Request unread messages from the topic.
                 ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
+                long current_time = System.nanoTime();
+                double elapsed_time = (current_time - start_time)/1e9;
                 if (records.count() == 0) {
-                    double elapsed_time = (System.nanoTime() - timer)/1e9;
                     if (printme) {
-                        System.out.println("\nNo messages after " + pollTimeOut / 1000 + "s. Total msgs consumed = " +
-                                records_processed + " over " + elapsed_time + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s");
+                        System.out.println("No messages after " + pollTimeOut / 1000 + "s. Total msgs consumed = " +
+                                records_processed + " over " + Math.round(elapsed_time) + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s" + ". Average msg latency = " + latency_total/records_processed + "s");
                         printme = false;
                     }
                 }
                 if (records.count() > 0) {
                     if (printme == false) {
-                        timer = System.nanoTime();
+                        start_time = System.nanoTime();
+                        last_update = 0;
+                        latency_total = 0;
+                        records_processed = 0;
+                        printme = true;
                     }
-                    printme = true;
                     for (ConsumerRecord<String, String> record : records) {
-                        System.out.print(".");
                         records_processed++;
-                        long current_time = System.nanoTime();
-                        System.out.print(".");
+                        latency_total = latency_total + (current_time - Long.valueOf(record.key()))/1e9;
+                        if ((Math.floor(current_time - start_time)/1e9) > last_update)
+                        {
+                            last_update ++;
+
+                            System.out.println("Total msgs consumed = " +
+                                    records_processed + " over " + Math.round(elapsed_time) + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s" + ". Average msg latency = " + latency_total/records_processed + "s");
+                        }
 
                         if (VERBOSE) {
                             System.out.printf("\tconsumed: '%s'\n" +

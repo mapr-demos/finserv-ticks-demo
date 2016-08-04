@@ -48,7 +48,7 @@ public class BasicConsumerRelay {
         topics.add(topic1);
         // Subscribe to the topic.
         consumer.subscribe(topics);
-        long pollTimeOut = 1000;  // milliseconds
+        long pollTimeOut = 5000;  // milliseconds
         boolean printme = false;
         try {
             while (true) {

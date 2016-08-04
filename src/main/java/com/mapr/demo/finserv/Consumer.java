@@ -82,7 +82,7 @@ public class Consumer {
         consumer.subscribe(topics);
 
 
-        long pollTimeOut = 1000;  // milliseconds
+        long pollTimeOut = 5000;  // milliseconds
 
 
         // https://kafka.apache.org/090/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
@@ -106,7 +106,13 @@ public class Consumer {
                         printme = false;
                     }
                 } else {
-                    printme = true;
+                    if (printme == false) {
+                        raw_records_parsed = 0;
+                        json_messages_published=0;
+                        startTime = System.nanoTime();
+                        last_update = 0;
+                        printme = true;
+                    }
                     for (ConsumerRecord<String, String> record : records) {
                         JSONObject json = parse(record.value());
                         raw_records_parsed++;
