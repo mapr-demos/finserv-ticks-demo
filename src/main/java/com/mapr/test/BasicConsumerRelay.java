@@ -9,7 +9,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-
+import com.mapr.demo.finserv.Monitor;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +21,8 @@ public class BasicConsumerRelay {
     public static KafkaProducer producer;
     private static boolean VERBOSE = false;
 
-    static long records_processed = 0L;
+    static long records_consumed = 0L;
+    static long records_published = 0L;
 
     public static void main(String[] args) throws IOException {
         Logger.getRootLogger().setLevel(Level.OFF);
@@ -50,22 +51,34 @@ public class BasicConsumerRelay {
         consumer.subscribe(topics);
         long pollTimeOut = 5000;  // milliseconds
         boolean printme = false;
+        long start_time = 0;
+        long last_update = 0;
+        long startTime = System.nanoTime();
+        double latency_total = 0;
         try {
             while (true) {
                 // Request unread messages from the topic.
                 ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
+                long current_time = System.nanoTime();
+                double elapsed_time = (current_time - start_time)/1e9;
                 if (records.count() == 0) {
                     if (printme) {
-                        producer.flush();
-                        System.out.println("\nNo messages after " + pollTimeOut / 1000 + "s. Total msgs relayed = " +
-                                records_processed);
+                        System.out.println("No messages after " + pollTimeOut / 1000 + "s. Total msgs consumed = " +
+                                records_consumed + ". Total msgs published = " + records_published + ". Duration =" + Math.round(elapsed_time) + "s. Average ingest rate = " + Math.round(records_consumed / elapsed_time / 1000) + "Kmsgs/s" + ". Average publish rate = " + Math.round(records_published / elapsed_time / 1000) + "Kmsgs/s" + ". Average msg latency = " + latency_total/ records_consumed + "s");
                         printme = false;
                     }
                 }
                 if (records.count() > 0) {
-                    printme = true;
+                    if (printme == false) {
+                        start_time = current_time;
+                        last_update = 0;
+                        latency_total = 0;
+                        records_consumed = 0;
+                        printme = true;
+                    }
                     for (ConsumerRecord<String, String> record : records) {
-                        long current_time = System.nanoTime();
+                        records_consumed++;
+                        latency_total = latency_total + (current_time - Long.valueOf(record.key()))/1e9;
 
                         if (VERBOSE) {
                             System.out.printf("\tconsumed: '%s'\n" +
@@ -75,12 +88,12 @@ public class BasicConsumerRelay {
                                             "\t\tkey = %s\n" +
                                             "\t\toffset = %d\n",
                                     record.value(),
-                                    (current_time - Long.valueOf(record.key()))/1e9,
+                                    (current_time - Long.valueOf(record.key())) / 1e9,
                                     record.topic(),
                                     record.partition(),
                                     record.key(),
                                     record.offset());
-
+                            System.out.println("\t\tTotal records consumed : " + records_consumed);
                             System.out.println("\t\tRelaying to topic " + topic2);
                         }
 
@@ -91,9 +104,7 @@ public class BasicConsumerRelay {
                         producer.send(rec,
                                 new Callback() {
                                     public void onCompletion(RecordMetadata metadata, Exception e) {
-                                        long current_time = System.nanoTime();
-                                        records_processed++;
-                                        System.out.print(".");
+                                        records_published++;
 
                                         if (VERBOSE) {
                                             System.out.printf("\tRelayed: '%s'\n" +
@@ -105,15 +116,24 @@ public class BasicConsumerRelay {
                                                     (current_time - Long.valueOf(key2)) / 1e9,
                                                     metadata.topic(),
                                                     metadata.partition(), metadata.offset());
-                                            System.out.println("\t\tTotal records published : " + records_processed);
+                                            System.out.println("\t\tTotal records published : " + records_published);
                                         }
                                     }
                                 });
 
+                        // Print performance stats once per second
+                        if ((Math.floor(current_time - start_time)/1e9) > last_update)
+                        {
+                            last_update ++;
+
+                            System.out.println("t = " + Math.round(elapsed_time) + ". Total msgs consumed   = " + records_consumed + ". Average ingest   rate = " + Math.round(records_consumed / elapsed_time / 1000) + "Kmsgs/s" + ". Average msg latency = " + latency_total/ records_consumed + "s.");
+                            System.out.println("t = " + Math.round(elapsed_time) + ". Total msgs published  = " + records_published + ". Average publish rate = " + Math.round(records_published / elapsed_time / 1000) + "Kmsgs/s");
+                        }
+
                         if (value2.equals("q")) {
                             producer.flush();
-                            System.out.println("\nRelayed " + records_processed + " messages from " + topic1 + " to " + topic2);
-                            records_processed = 0;
+                            System.out.println("\nRelayed " + records_published + " messages from " + topic1 + " to " + topic2);
+                            records_consumed = 0;
                         }
 
                         consumer.commitSync();
@@ -126,11 +146,12 @@ public class BasicConsumerRelay {
         } catch (Throwable throwable) {
             System.err.printf("%s", throwable.getStackTrace());
         } finally {
-            consumer.close();
             producer.flush();
-            producer.close();
-            System.out.println("Relayed " + records_processed + " messages.");
+            System.out.println("Consumed " + records_consumed + " messages.");
+            System.out.println("Relayed " + records_published + " messages.");
             System.out.println("Finished.");
+            consumer.close();
+            producer.close();
         }
 
 

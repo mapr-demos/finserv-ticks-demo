@@ -121,7 +121,7 @@ public class Consumer {
                         } catch (ParseException e) {
                             System.err.println(e.getMessage());
                         }
-                        
+
                         consumer.commitSync();
                     }
 

@@ -44,7 +44,8 @@ public class Producer {
 
             while (line != null) {
 
-                String key = Long.toString(System.nanoTime());
+                long current_time = System.nanoTime();
+                String key = Long.toString(current_time);
                 ProducerRecord<String, String> record = new ProducerRecord<String, String>(topic, key, line);
 
                 // Send the record to the producer client library.
@@ -60,7 +61,7 @@ public class Producer {
 
 
                 // Print performance stats once per second
-                if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update)
+                if ((Math.floor(current_time - startTime)/1e9) > last_update)
                 {
                     last_update ++;
                     producer.flush();
@@ -73,14 +74,14 @@ public class Producer {
             System.err.printf("%s", throwable.getStackTrace());
         } finally {
             producer.flush();
-            producer.close();
             try {
-                Thread.sleep(5000);
+                Thread.sleep(2000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
             System.out.println("Published " + records_processed + " messages to stream.");
             System.out.println("Finished.");
+            producer.close();
         }
     }
 

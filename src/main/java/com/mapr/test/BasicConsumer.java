@@ -72,7 +72,7 @@ public class BasicConsumer {
                 }
                 if (records.count() > 0) {
                     if (printme == false) {
-                        start_time = System.nanoTime();
+                        start_time = current_time;
                         last_update = 0;
                         latency_total = 0;
                         records_processed = 0;

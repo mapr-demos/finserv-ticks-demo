@@ -85,8 +85,8 @@ public class BasicProducer {
             e.printStackTrace();
         } finally {
             producer.flush();
-            producer.close();
             System.out.println("\nTotal records published : " + records_processed);
+            producer.close();
             if (br != null) {
                 try {
                     br.close();
