@@ -114,10 +114,14 @@ public class Consumer {
                         printme = true;
                     }
                     for (ConsumerRecord<String, String> record : records) {
-                        JSONObject json = parse(record.value());
-                        raw_records_parsed++;
-                        streamJSON(record.key(),json);
-
+                        try {
+                            JSONObject json = parse(record.value());
+                            raw_records_parsed++;
+                            streamJSON(record.key(),json);
+                        } catch (ParseException e) {
+                            System.err.println(e.getMessage());
+                        }
+                        
                         consumer.commitSync();
                     }
 
