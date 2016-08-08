@@ -26,6 +26,7 @@ public class Consumer {
     static HashSet<String> jsontopics = new HashSet<>();
 
     private static JSONObject parse(String record) throws ParseException {
+        // TODO: handle corrupted messages or messages with missing fields gracefully
         if (record.length() < 71) {
             throw new ParseException("Expected line to be at least 71 characters, but got " + record.length(), record.length());
         }
