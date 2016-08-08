@@ -3,12 +3,13 @@ package com.mapr.demo.finserv;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Charsets;
 
+import java.io.IOException;
 import java.io.Serializable;
 
 /**
  * This tick is a data structure containing a single tick
  * that avoids parsing the underlying bytes as long as possible.
- *
+ * <p>
  * By using annotations, it also supports fast serialization to JSON.
  */
 public class Tick2 implements Serializable {
@@ -77,5 +78,18 @@ public class Tick2 implements Serializable {
         return new String(data, 70, 1);
     }
 
-    // TODO actually implement the Serializable methods
+    private void writeObject(java.io.ObjectOutputStream out) throws IOException {
+        out.writeInt(data.length);
+        out.write(data);
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+        int length = in.readInt();
+        data = new byte[length];
+        int n = in.read(data);
+        if (n != length) {
+            throw new IOException("Couldn't read entire Tick2 object, only got " + n + " bytes");
+        }
+
+    }
 }
