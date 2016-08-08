@@ -78,12 +78,12 @@ public class Tick2 implements Serializable {
         return new String(data, 70, 1);
     }
 
-    private void writeObject(java.io.ObjectOutputStream out) throws IOException {
+    public void writeObject(java.io.ObjectOutputStream out) throws IOException {
         out.writeInt(data.length);
         out.write(data);
     }
 
-    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+    public void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
         int length = in.readInt();
         data = new byte[length];
         int n = in.read(data);
