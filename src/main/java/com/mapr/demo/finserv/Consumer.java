@@ -79,7 +79,7 @@ public class Consumer {
                         printme = true;
                     }
                     for (ConsumerRecord<String, String> record : records) {
-                        Tick2 json = new Tick2(record.value());
+                        Tick json = new Tick(record.value());
                         raw_records_parsed++;
                         streamJSON(record.key(),json);
 
@@ -105,7 +105,7 @@ public class Consumer {
 
     }
 
-    public static void streamJSON(String key, Tick2 json) {
+    public static void streamJSON(String key, Tick json) {
         String jsontopic = "/user/mapr/taq:"+json.getSender();
         jsontopics.add(jsontopic);
         ProducerRecord<String, String> rec = new ProducerRecord<String, String>(jsontopic, key, json.toString());

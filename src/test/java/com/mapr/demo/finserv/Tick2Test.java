@@ -2,12 +2,10 @@ package com.mapr.demo.finserv;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Charsets;
-import com.google.common.collect.Lists;
 import com.google.common.io.Resources;
 import org.junit.Test;
 
 import java.io.*;
-import java.nio.charset.Charset;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -19,7 +17,7 @@ public class Tick2Test {
     @org.junit.Test
     public void testGetDate() throws IOException {
         List<String> data = Resources.readLines(Resources.getResource("sample-tick-01.txt"), Charsets.ISO_8859_1);
-        Tick2 t = new Tick2(data.get(0));
+        Tick t = new Tick(data.get(0));
         assertEquals(t.getDate(), "080845201");
 
         ObjectMapper mapper = new ObjectMapper();
@@ -40,7 +38,7 @@ public class Tick2Test {
         try (OutputStream out = new BufferedOutputStream(new FileOutputStream(tempFile), 10_000_000)) {
             for (int i = 0; i < N; i++) {
                 int j = i % m;
-                Tick2 t = new Tick2(data.get(j));
+                Tick t = new Tick(data.get(j));
                 out.write(mapper.writeValueAsBytes(t));
 //                out.write(NEWLINE);
             }
@@ -60,7 +58,7 @@ public class Tick2Test {
         try (ObjectOutputStream out = new ObjectOutputStream(new BufferedOutputStream(new FileOutputStream(tempFile), 10_000_000))) {
             for (int i = 0; i < N; i++) {
                 int j = i % data.size();
-                Tick2 t = new Tick2(data.get(j));
+                Tick t = new Tick(data.get(j));
                 out.writeObject(t);
             }
         }

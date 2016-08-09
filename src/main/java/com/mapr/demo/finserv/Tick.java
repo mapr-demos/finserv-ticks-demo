@@ -14,14 +14,14 @@ import java.util.List;
  * <p>
  * By using annotations, it also supports fast serialization to JSON.
  */
-public class Tick2 implements Serializable {
+public class Tick implements Serializable {
     private byte[] data;
 
-    public Tick2(byte[] data) {
+    public Tick(byte[] data) {
         this.data = data;
     }
 
-    public Tick2(String data) {
+    public Tick(String data) {
         this.data = data.getBytes(Charsets.ISO_8859_1);
     }
 
@@ -132,7 +132,7 @@ public class Tick2 implements Serializable {
         data = new byte[length];
         int n = in.read(data);
         if (n != length) {
-            throw new IOException("Couldn't read entire Tick2 object, only got " + n + " bytes");
+            throw new IOException("Couldn't read entire Tick object, only got " + n + " bytes");
         }
 
     }
