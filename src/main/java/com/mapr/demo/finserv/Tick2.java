@@ -5,6 +5,8 @@ import com.google.common.base.Charsets;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * This tick is a data structure containing a single tick
@@ -78,6 +80,20 @@ public class Tick2 implements Serializable {
     @JsonProperty("trade-reporting-facility")
     String getTradeReportingFacility() {
         return new String(data, 70, 1);
+    }
+
+    @JsonProperty("sender")
+    String getSender() {
+        return new String(data,71,4);
+    }
+
+    @JsonProperty("receiver-list")
+    List<String> getReceivers() {
+        List<String> receivers = new ArrayList<>();
+        for (int i=0; data.length >= 78 + i*4; i++) {
+            receivers.add(new String(data, 75 + i*4, 4));
+        }
+        return receivers;
     }
 
     private double digitsAsDouble(int start, int length, int decimals) {
