@@ -35,26 +35,45 @@ public class Tick2 implements Serializable {
 
     @JsonProperty("symbol-root")
     String getSymbolRoot() {
-        return new String(data, 10, 6).trim();
+        return trim(10, 6);
     }
 
     @JsonProperty("symbol-suffix")
     String getSymbolSuffix() {
-        return new String(data, 16, 10).trim();
+        return trim(16, 10);
     }
 
     @JsonProperty("sale-condition")
     String getSaleCondition() {
-        return new String(data, 26, 4).trim();
+        return trim(26, 4);
     }
 
     @JsonProperty("trade-volume")
-    String getTradeVolume() {
-        int i = 30;
-        while (i < 39 && data[i] == '0') {
-            i++;
+    double getTradeVolume() {
+        return digitsAsInt(30, 9);
+    }
+
+    @JsonProperty("trade-price")
+    double getTradePrice() {
+        return digitsAsDouble(39, 11, 4);
+    }
+
+    private double digitsAsDouble(int start, int length, int decimals) {
+        double r = digitsAsInt(start, length);
+        for (int i = 0; i < decimals; i++) {
+            r = r / 10;
         }
-        return new String(data, i, 39 - i);
+        return r;
+    }
+
+    private int digitsAsInt(int start, int length) {
+        int r = 0;
+        for (int i = start; i < start + length; i++) {
+            if (data[i] != ' ') {
+                r = r * 10 + data[i] - '0';
+            }
+        }
+        return r;
     }
 
     //String getTradePrice() {return new String(data, 39, 46) + "." + record.substring(data, 46, getTradeStopStockIndicator() {return new String(data, 50, 51); }
@@ -74,8 +93,21 @@ public class Tick2 implements Serializable {
         return new String(data, 69, 1);
     }
 
+    @JsonProperty("trade-reporting-facility")
     String getTradeReportingFacility() {
         return new String(data, 70, 1);
+    }
+
+    private String trim(int start, int length) {
+        return trim(start, length, ' ');
+    }
+
+    private String trim(int start, int length, char toTrim) {
+        int i = start;
+        while (i < start + length && data[i] == toTrim) {
+            i++;
+        }
+        return new String(data, i, start + length - i);
     }
 
     public void writeObject(java.io.ObjectOutputStream out) throws IOException {
