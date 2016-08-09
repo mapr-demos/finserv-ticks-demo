@@ -2,10 +2,12 @@ package com.mapr.demo.finserv;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Charsets;
+import com.google.common.collect.Lists;
 import com.google.common.io.Resources;
 import org.junit.Test;
 
 import java.io.*;
+import java.nio.charset.Charset;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -29,14 +31,15 @@ public class Tick2Test {
         List<String> data = Resources.readLines(Resources.getResource("sample-tick-01.txt"), Charsets.ISO_8859_1);
         ObjectMapper mapper = new ObjectMapper();
 
-        double t0 = System.nanoTime() * 1e-9;
         File tempFile = File.createTempFile("foo", "data");
         tempFile.deleteOnExit();
         System.out.printf("file = %s\n", tempFile);
         byte[] NEWLINE = "\n".getBytes();
+        double t0 = System.nanoTime() * 1e-9;
+        int m = data.size();
         try (OutputStream out = new BufferedOutputStream(new FileOutputStream(tempFile), 10_000_000)) {
             for (int i = 0; i < N; i++) {
-                int j = i % data.size();
+                int j = i % m;
                 Tick2 t = new Tick2(data.get(j));
                 out.write(mapper.writeValueAsBytes(t));
 //                out.write(NEWLINE);

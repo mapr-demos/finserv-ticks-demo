@@ -58,24 +58,6 @@ public class Tick2 implements Serializable {
         return digitsAsDouble(39, 11, 4);
     }
 
-    private double digitsAsDouble(int start, int length, int decimals) {
-        double r = digitsAsInt(start, length);
-        for (int i = 0; i < decimals; i++) {
-            r = r / 10;
-        }
-        return r;
-    }
-
-    private int digitsAsInt(int start, int length) {
-        int r = 0;
-        for (int i = start; i < start + length; i++) {
-            if (data[i] != ' ') {
-                r = r * 10 + data[i] - '0';
-            }
-        }
-        return r;
-    }
-
     //String getTradePrice() {return new String(data, 39, 46) + "." + record.substring(data, 46, getTradeStopStockIndicator() {return new String(data, 50, 51); }
 
     @JsonProperty("trade-correction-indicator")
@@ -98,13 +80,27 @@ public class Tick2 implements Serializable {
         return new String(data, 70, 1);
     }
 
-    private String trim(int start, int length) {
-        return trim(start, length, ' ');
+    private double digitsAsDouble(int start, int length, int decimals) {
+        double r = digitsAsInt(start, length);
+        for (int i = 0; i < decimals; i++) {
+            r = r / 10;
+        }
+        return r;
     }
 
-    private String trim(int start, int length, char toTrim) {
+    private int digitsAsInt(int start, int length) {
+        int r = 0;
+        for (int i = start; i < start + length; i++) {
+            if (data[i] != ' ') {
+                r = r * 10 + data[i] - '0';
+            }
+        }
+        return r;
+    }
+
+    private String trim(int start, int length) {
         int i = start;
-        while (i < start + length && data[i] == toTrim) {
+        while (i < start + length && data[i] == ' ') {
             i++;
         }
         return new String(data, i, start + length - i);
