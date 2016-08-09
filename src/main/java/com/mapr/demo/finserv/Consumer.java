@@ -9,7 +9,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import java.util.*;
 
-public class Consumer {
+public class Consumer implements Runnable {
 
 
     // Declare a new consumer.
@@ -18,8 +18,10 @@ public class Consumer {
     public static KafkaProducer producer;
     public static long json_messages_published = 0L;
     public static long raw_records_parsed = 0L;
+    public static boolean printme = false;
     static long startTime;
     static long last_update;
+    long pollTimeOut = 5000;  // milliseconds
     static HashSet<String> jsontopics = new HashSet<>();
 
     public static void main(String[] args) {
@@ -45,67 +47,20 @@ public class Consumer {
         // Subscribe to the topic.
         consumer.subscribe(topics);
 
-
-        long pollTimeOut = 5000;  // milliseconds
-
-
         // https://kafka.apache.org/090/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html
         // This paradigm is an "at least once delivery" guarantee.
         // TODO: Is it okay for the listener #1 to potentially persist duplicate messages?
 
         startTime = System.nanoTime();
         last_update = 0;
-        boolean printme = false;
-        try {
-            while (true) {
-                // Request unread messages from the topic.
-                ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
-
-                if (records.count() == 0) {
-                    if (printme) {
-                        producer.flush();
-                        System.out.println("No messages after " + pollTimeOut / 1000 + "s. Total raw consumed = " +
-                                raw_records_parsed + ". Total JSON published " + json_messages_published);
-                        System.out.println("JSON topics:");
-                        jsontopics.forEach(t -> System.out.println("\t" + t));
-                        printme = false;
-                    }
-                } else {
-                    if (printme == false) {
-                        raw_records_parsed = 0;
-                        json_messages_published=0;
-                        startTime = System.nanoTime();
-                        last_update = 0;
-                        printme = true;
-                    }
-                    for (ConsumerRecord<String, String> record : records) {
-                        Tick json = new Tick(record.value());
-                        raw_records_parsed++;
-                        streamJSON(record.key(),json);
-
-
-                        consumer.commitSync();
-                    }
-
-                    // Print performance stats once per second
-                    if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update) {
-                        last_update++;
-                        Monitor.print_status(raw_records_parsed, 1, startTime);
-                    }
-                }
-            }
-
-        } catch (Throwable throwable) {
-            System.err.printf("%s", throwable.getStackTrace());
-        } finally {
-            consumer.close();
-            System.out.println("Consumed " + raw_records_parsed + " messages from stream.");
-            System.out.println("Finished.");
-        }
-
+        printme = false;
+        Consumer myself = new Consumer();
+        new Thread(myself).start();
+        new Thread(myself).start();
+        new Thread(myself).start();
     }
 
-    public static void streamJSON(String key, Tick json) {
+    public void streamJSON(String key, Tick json) {
         String jsontopic = "/user/mapr/taq:"+json.getSender();
         jsontopics.add(jsontopic);
         ProducerRecord<String, String> rec = new ProducerRecord<String, String>(jsontopic, key, json.toString());
@@ -113,7 +68,9 @@ public class Consumer {
         producer.send(rec,
                 new Callback() {
                     public void onCompletion(RecordMetadata metadata, Exception e) {
-                        json_messages_published++;  // TODO: make this thread safe
+                        synchronized (this) {
+                            json_messages_published++;  // TODO: make this thread safe
+                        }
                         if(e != null)
                             e.printStackTrace();
                     }
@@ -122,10 +79,12 @@ public class Consumer {
         // Print performance stats once per second
         if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update)
         {
-            last_update ++;
+            synchronized (this) {
+                last_update ++;
+            }
             producer.flush();
             long elapsedTime = System.nanoTime() - startTime;
-            System.out.printf("JSON messages published = %d. Thruput = %.2f Kmsgs/sec\n", json_messages_published,
+            System.out.printf("Thread: " + Thread.currentThread().getName() + ".JSON messages published = %d. Thruput = %.2f Kmsgs/sec\n", json_messages_published,
                     json_messages_published / ((double) elapsedTime / 1e9) / 1000);
         }
 
@@ -156,4 +115,61 @@ public class Consumer {
         jsonconsumer = new KafkaConsumer<String, String>(props);
     }
 
+    @Override
+    public void run() {
+
+        try {
+            while (true) {
+                // Request unread messages from the topic.
+                ConsumerRecords<String, String> records;
+                synchronized (this) {
+                    records= consumer.poll(pollTimeOut);
+                    consumer.commitSync();
+                }
+                if (records.count() == 0) {
+                    synchronized (this) {
+                        if (printme) {
+                            producer.flush();
+                            System.out.println("Thread: " + Thread.currentThread().getName() + ". No messages after " + pollTimeOut / 1000 + "s. Total raw consumed = " +
+                                    raw_records_parsed + ". Total JSON published " + json_messages_published);
+
+                            System.out.println("JSON topics:");
+                            jsontopics.forEach(t -> System.out.println("\t" + t));
+                            printme = false;
+                        }
+                    }
+                } else {
+                    synchronized (this) {
+                        if (printme == false) {
+                            raw_records_parsed = 0;
+                            json_messages_published = 0;
+                            startTime = System.nanoTime();
+                            last_update = 0;
+                            printme = true;
+                        }
+                    }
+                    for (ConsumerRecord<String, String> record : records) {
+                        Tick json = new Tick(record.value());
+                        synchronized (this) {
+                            raw_records_parsed++;
+                        }
+                        streamJSON(record.key(),json);
+                    }
+
+                    // Print performance stats once per second
+                    if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update) {
+                        last_update++;
+                        Monitor.print_status(raw_records_parsed, 1, startTime);
+                    }
+                }
+            }
+
+        } catch (Throwable throwable) {
+            System.err.printf("%s", throwable.getStackTrace());
+        } finally {
+            consumer.close();
+            System.out.println("Consumed " + raw_records_parsed + " messages from stream.");
+            System.out.println("Finished.");
+        }
+    }
 }

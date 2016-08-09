@@ -19,7 +19,7 @@ public class Monitor {
 //            if (f != null && f.isDone())
 //                counter++;
 //        }
-        System.out.printf("Throughput = %.2f raw Kmsgs/sec consumed. Threads = %d. Total raw msgs consumed = %d. Total json msgs published: = %d\n",
+        System.out.printf("Thread: " + Thread.currentThread().getName() + ". Throughput = %.2f raw Kmsgs/sec consumed. Threads = %d. Total raw msgs consumed = %d. Total json msgs published: = %d\n",
                 records_processed / ((double) elapsedTime / 1000000000.0) / 1000,
                 poolSize, records_processed,
                 Consumer.json_messages_published);
