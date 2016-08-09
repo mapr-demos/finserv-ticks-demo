@@ -1,6 +1,5 @@
 package com.mapr.demo.finserv;/* Copyright (c) 2009 & onwards. MapR Tech, Inc., All rights reserved */
 
-import java.text.ParseException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -8,8 +7,6 @@ import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
-import org.json.simple.JSONArray;
-import org.json.simple.JSONObject;
 import java.util.*;
 
 public class Consumer {
@@ -24,40 +21,6 @@ public class Consumer {
     static long startTime;
     static long last_update;
     static HashSet<String> jsontopics = new HashSet<>();
-
-    private static JSONObject parse(String record) throws ParseException {
-        // TODO: handle corrupted messages or messages with missing fields gracefully
-        if (record.length() < 71) {
-            throw new ParseException("Expected line to be at least 71 characters, but got " + record.length(), record.length());
-        }
-
-        JSONObject trade_info = new JSONObject();
-        trade_info.put("date", record.substring(0, 9));
-        trade_info.put("exchange", record.substring(9, 10));
-        trade_info.put("symbol root", record.substring(10, 16).trim());
-        trade_info.put("symbol suffix", record.substring(16, 26).trim());
-        trade_info.put("saleCondition", record.substring(26, 30).trim());
-        trade_info.put("tradeVolume", record.substring(30, 39));
-        trade_info.put("tradePrice", record.substring(39, 46) + "." + record.substring(46, 50));
-        trade_info.put("tradeStopStockIndicator", record.substring(50, 51));
-        trade_info.put("tradeCorrectionIndicator", record.substring(51, 53));
-        trade_info.put("tradeSequenceNumber", record.substring(53, 69));
-        trade_info.put("tradeSource", record.substring(69, 70));
-        trade_info.put("tradeReportingFacility", record.substring(70, 71));
-        if (record.length() >= 74) {
-            trade_info.put("sender", record.substring(71, 75));
-
-            JSONArray receiver_list = new JSONArray();
-            int i = 0;
-            while (record.length() >= 78 + i) {
-                receiver_list.add(record.substring(75 + i, 79 + i));
-                i += 4;
-            }
-            trade_info.put("receivers", receiver_list);
-        }
-        return trade_info;
-
-    }
 
     public static void main(String[] args) {
         Runtime runtime = Runtime.getRuntime();
@@ -97,6 +60,7 @@ public class Consumer {
             while (true) {
                 // Request unread messages from the topic.
                 ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
+
                 if (records.count() == 0) {
                     if (printme) {
                         producer.flush();
@@ -115,13 +79,10 @@ public class Consumer {
                         printme = true;
                     }
                     for (ConsumerRecord<String, String> record : records) {
-                        try {
-                            JSONObject json = parse(record.value());
-                            raw_records_parsed++;
-                            streamJSON(record.key(),json);
-                        } catch (ParseException e) {
-                            System.err.println(e.getMessage());
-                        }
+                        Tick2 json = new Tick2(record.value());
+                        raw_records_parsed++;
+                        streamJSON(record.key(),json);
+
 
                         consumer.commitSync();
                     }
@@ -144,8 +105,8 @@ public class Consumer {
 
     }
 
-    public static void streamJSON(String key, JSONObject json) {
-        String jsontopic = "/user/mapr/taq:"+json.get("sender");
+    public static void streamJSON(String key, Tick2 json) {
+        String jsontopic = "/user/mapr/taq:"+json.getSender();
         jsontopics.add(jsontopic);
         ProducerRecord<String, String> rec = new ProducerRecord<String, String>(jsontopic, key, json.toString());
         // Non-blocking send. Callback invoked when request is complete.
