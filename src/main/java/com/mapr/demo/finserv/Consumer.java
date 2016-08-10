@@ -16,8 +16,8 @@ public class Consumer implements Runnable {
     private static long json_messages_published = 0L;
     private static long raw_records_parsed = 0L;
     private static boolean printme = false;
-    private static long startTime;
-    private static TreeSet<String> jsontopics = new TreeSet<>();
+    private static long start_time;
+    private static TreeSet<String> json_topics = new TreeSet<>();
 
     private KafkaConsumer consumer;
     private KafkaProducer producer;
@@ -43,28 +43,11 @@ public class Consumer implements Runnable {
         String topic =  args[1] ;
         System.out.println("Subscribed to : "+ topic);
 
-        startTime = System.nanoTime();
+        start_time = System.nanoTime();
         printme = false;
         System.out.println("Spawning " + NUM_THREADS + " consumer threads");
         for (int i = 0; i < NUM_THREADS; i++)
             new Thread(new Consumer(topic)).start();
-    }
-
-    private void streamJSON(String key, Tick json) {
-        String jsontopic = "/user/mapr/taq:"+json.getSender();
-        jsontopics.add(jsontopic);
-        ProducerRecord<String, String> rec = new ProducerRecord<>(jsontopic, key, json.toString());
-        // Non-blocking send. Callback invoked when request is complete.
-        producer.send(rec,
-                new Callback() {
-                    public void onCompletion(RecordMetadata metadata, Exception e) {
-                        if(metadata == null || e != null) {
-                            // If there appears to have been an error, decrement our counter metric
-                            my_json_messages_published--;
-                            e.printStackTrace();
-                        }
-                    }
-                });
     }
 
     private void configureProducer() {
@@ -122,7 +105,7 @@ public class Consumer implements Runnable {
                                     raw_records_parsed + ". JSON published (all threads) = " + json_messages_published + " -----");
 
                             System.out.println("JSON topics:");
-                            jsontopics.forEach(t -> System.out.println("\t" + t));
+                            json_topics.forEach(t -> System.out.println("\t" + t));
                             System.out.flush();
                             printme = false;
                         }
@@ -138,7 +121,7 @@ public class Consumer implements Runnable {
                                 json_messages_published = 0;
                                 my_json_messages_published = 0;
                                 my_total_json_messages_published = 0;
-                                startTime = System.nanoTime();
+                                start_time = System.nanoTime();
                                 my_last_update = 0;
                                 printme = true;
                             }
@@ -153,7 +136,7 @@ public class Consumer implements Runnable {
                     my_json_messages_published++;
 
                     // update metrics and print status once per second on each thread
-                    elapsed_time = (System.nanoTime() - startTime) / 1e9;
+                    elapsed_time = (System.nanoTime() - start_time) / 1e9;
                     if (Math.floor(elapsed_time) > my_last_update) {
                         // update metrics
                         synchronized (this) {
@@ -186,5 +169,22 @@ public class Consumer implements Runnable {
             System.out.println("Consumed " + raw_records_parsed + " messages from stream (all threads).");
             System.out.println("Finished.");
         }
+    }
+
+    private void streamJSON(String key, Tick json) {
+        String jsontopic = "/user/mapr/taq:"+json.getSender();
+        json_topics.add(jsontopic);
+        ProducerRecord<String, String> rec = new ProducerRecord<>(jsontopic, key, json.toString());
+        // Non-blocking send. Callback invoked when request is complete.
+        producer.send(rec,
+                new Callback() {
+                    public void onCompletion(RecordMetadata metadata, Exception e) {
+                        if(metadata == null || e != null) {
+                            // If there appears to have been an error, decrement our counter metric
+                            my_json_messages_published--;
+                            e.printStackTrace();
+                        }
+                    }
+                });
     }
 }
