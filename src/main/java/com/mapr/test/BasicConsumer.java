@@ -2,17 +2,11 @@ package com.mapr.test;
 
 import java.io.*;
 
-import com.mapr.demo.finserv.Monitor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.Callback;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
