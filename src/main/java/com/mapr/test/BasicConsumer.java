@@ -54,13 +54,17 @@ public class BasicConsumer {
         try {
             while (true) {
                 // Request unread messages from the topic.
-                ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
+                ConsumerRecords<String, byte[]> records = consumer.poll(pollTimeOut);
                 long current_time = System.nanoTime();
                 double elapsed_time = (current_time - start_time)/1e9;
                 if (records.count() == 0) {
                     if (printme) {
-                        System.out.println("No messages after " + pollTimeOut / 1000 + "s. Total msgs consumed = " +
-                                records_processed + " over " + Math.round(elapsed_time) + "s. Average msg latency = " + latency_total/records_processed + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s");
+                        System.out.println("===== No messages after " + pollTimeOut / 1000 + " =====");
+                        System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
+                                records_processed,
+                                Math.round(elapsed_time),
+                                latency_total/records_processed,
+                                Math.round(records_processed / elapsed_time / 1000));
                         printme = false;
                     }
                 }
@@ -72,15 +76,18 @@ public class BasicConsumer {
                         records_processed = 0;
                         printme = true;
                     }
-                    for (ConsumerRecord<String, String> record : records) {
+                    for (ConsumerRecord<String, byte[]> record : records) {
                         records_processed++;
                         latency_total = latency_total + (current_time - Long.valueOf(record.key()))/1e9;
                         if ((Math.floor(current_time - start_time)/1e9) > last_update)
                         {
                             last_update ++;
 
-                            System.out.println("Total msgs consumed = " +
-                                    records_processed + " over " + Math.round(elapsed_time) + "s. Average msg latency = " + latency_total/records_processed + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s");
+                            System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
+                                    records_processed,
+                                    Math.round(elapsed_time),
+                                    latency_total/records_processed,
+                                    Math.round(records_processed / elapsed_time / 1000));
                         }
 
                         if (VERBOSE) {
@@ -130,7 +137,7 @@ public class BasicConsumer {
                 "org.apache.kafka.common.serialization.StringDeserializer");
         //  which class to use to deserialize the value of each message
         props.put("value.deserializer",
-                "org.apache.kafka.common.serialization.StringDeserializer");
+                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
 
         consumer = new KafkaConsumer<String, String>(props);
     }

@@ -73,7 +73,7 @@ public class Consumer implements Runnable {
         props.put("key.serializer",
                 "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer",
-                "org.apache.kafka.common.serialization.StringSerializer");
+                "org.apache.kafka.common.serialization.ByteArraySerializer");
 
         producer = new KafkaProducer<String, String>(props);
     }
@@ -87,7 +87,7 @@ public class Consumer implements Runnable {
                 "org.apache.kafka.common.serialization.StringDeserializer");
         //  which class to use to deserialize the value of each message
         props.put("value.deserializer",
-                "org.apache.kafka.common.serialization.StringDeserializer");
+                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
 
         consumer = new KafkaConsumer<String, String>(props);
     }
@@ -112,15 +112,19 @@ public class Consumer implements Runnable {
         try {
             while (true) {
                 // Request unread messages from the topic.
-                ConsumerRecords<String, String> records;
+                ConsumerRecords<String, byte[]> records;
                 // TODO: is poll() thread safe?
                 records = consumer.poll(POLL_INTERVAL);
                 if (records.count() == 0) {
                     synchronized (this) {
                         if (printme) {
                             producer.flush();
-                            System.out.println("----- " + Thread.currentThread().getName() + " has seen zero messages in " + POLL_INTERVAL / 1000 + "s. Raw consumed (all threads) = " +
-                                    raw_records_parsed + ". JSON published (all threads) = " + json_messages_published + " -----");
+                            System.out.println("========== " +
+                                    Thread.currentThread().getName() +
+                                    " has seen zero messages in " + POLL_INTERVAL / 1000 +
+                                    "s. Raw consumed (all threads) = " +
+                                    raw_records_parsed + ". JSON published (all threads) = " +
+                                    json_messages_published  + " ==========");
 
                             System.out.println("Sender topics:");
                             sender_topics.forEach(t -> System.out.println("\t" + t));
@@ -147,10 +151,10 @@ public class Consumer implements Runnable {
                     }
                 }
 
-                for (ConsumerRecord<String, String> record : records) {
+                for (ConsumerRecord<String, byte[]> record : records) {
                     Tick json = new Tick(record.value());
                     my_raw_records_parsed++;
-                    streamJSON(record.key(), json);
+                    routeToTopic(record.key(), json);
                     my_json_messages_published++;
 
                     // update metrics and print status once per second on each thread
@@ -181,7 +185,7 @@ public class Consumer implements Runnable {
             }
 
         } catch (Exception e) {
-            System.err.printf("ERROR: %s\n", e.getStackTrace());
+            System.err.println("ERROR: " + e);
         } finally {
             consumer.close();
             System.out.println("Consumed " + raw_records_parsed + " messages from stream (all threads).");
@@ -189,24 +193,24 @@ public class Consumer implements Runnable {
         }
     }
 
-    private void streamJSON(String key, Tick tick) {
-        ProducerRecord<String, String> record;
+    private void routeToTopic(String key, Tick tick) {
+        ProducerRecord<String, byte[]> record;
 
         sender_topics.add("/user/mapr/taq:" + tick.getSender());
-        record = new ProducerRecord<>("/user/mapr/taq:" + tick.getSender(), key, tick.toString());
+        record = new ProducerRecord<>("/user/mapr/taq:" + tick.getSender(), key, tick.getData());
         publish (record);
 
         for (String receiver : tick.getReceivers())
         {
             receiver_topics.add("/user/mapr/taq:" + receiver);
-            record = new ProducerRecord<>("/user/mapr/taq:" + receiver, key, tick.toString());
+            record = new ProducerRecord<>("/user/mapr/taq:" + receiver, key, tick.getData());
             publish (record);
         }
     }
 
-    private void publish(ProducerRecord<String, String> rec) {
+    private void publish(ProducerRecord<String, byte[]> record) {
         // Non-blocking send. Callback invoked when request is complete.
-        producer.send(rec,
+        producer.send(record,
                 new Callback() {
                     public void onCompletion(RecordMetadata metadata, Exception e) {
                         if (metadata == null || e != null) {
