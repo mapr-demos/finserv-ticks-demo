@@ -44,7 +44,7 @@ N_RECV_UPPER = 3
 INPUT_FILE = "/home/mapr/nyse/taqtrade20131218"
 
 # directory for per-second output files
-OUTPUT_DIR = "/home/mapr/nyse/data"
+OUTPUT_DIR = "/home/mapr/test2/orig/finserv-ticks-demo/data/"
 
 # expected length of a single record in the input
 LINELEN = 73
@@ -185,16 +185,22 @@ def output_trades(df, bdf, secid, seq):
     print "writing file %s" % fn
     with open(fn, "w") as output:
         for i, r in combodf.iterrows():
-            output.write("%9s%1s%16s%4s%9s%11s%1s%16s%1s%1s" % (r.date[0:9],
+            outstr = "%9s%1s%16s%4s%9s%11s%1s%2s%16s%1s%1s" % (r.date[0:9],
                     r.exchange,
                     r.symbol,
                     r.saleCondition,
                     r.tradeVolume,
                     r.tradePrice,
                     r.tradeStopStockIndicator,
+                    r.tradeCorrectionIndicator,
                     r.tradeSequenceNumber,
                     r.tradeSource,
-                    r.tradeReportingFacility))
+                    r.tradeReportingFacility)
+            # check for errors in length before we add the senders/receivers
+            if (len(outstr) != LINELEN - 2):
+                sys.stderr.write("fatal:  output line len %d, expected %d, malformed\n" % (len(outstr), LINELEN))
+                sys.exit(1)
+            output.write('%s' % outstr)
             if (r.type == 'B' or r.type == 'A'):
                 output.write("%s" % r.sendID)
                 for ent in r.recvID:
@@ -219,9 +225,6 @@ except KeyboardInterrupt:
 
 print "parsed %d lines" % len(dlines)
 df = pd.DataFrame(dlines).sort_values(['date'], ascending = 1).reset_index()
-# print df.head(2)
-# print df.tail(2)
-# print df['tradeSource'].value_counts()
 
 # take the first event in the file and start at the beginning
 # of that second
@@ -230,8 +233,6 @@ windowidx = []
 allbidasks = []
 
 # grab the first time in the file
-# note this will chop the last [window] seconds of trades
-# but it should be negligible compared to the overall size
 firstent = df.iloc[0]
 endent = df.iloc[-1]
 ftime = get_row_date_dt(firstent)

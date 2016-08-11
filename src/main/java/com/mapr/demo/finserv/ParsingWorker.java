@@ -2,18 +2,23 @@ package com.mapr.demo.finserv;
 
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import java.text.ParseException;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.LinkedList;
+import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 
 public class ParsingWorker implements Callable<Boolean> {
 
     ConsumerRecord record;
     static long records_processed = 0L;
+    public static LinkedList<Future<RecordMetadata>> json_stream_futures = new LinkedList<>();
 
     public ParsingWorker(ConsumerRecord record) {
         this.record = record;
@@ -23,13 +28,37 @@ public class ParsingWorker implements Callable<Boolean> {
 
         try {
             // processing steps go here
-            parse((String)record.value());
+            JSONObject json = parse((String)record.value());
+            Future<RecordMetadata> write_status = Publish((String)json.get("sender"), "/user/mapr/taq:"+json.get("sender"), json);
+            json_stream_futures.add(write_status);
+            //RecordMetadata result = write_status.get();
+//            System.out.println("publish returned: " + result.topic() + " partition " + result.partition() + " offset " + result.offset());
+            System.out.println("json_stream_futures size = " + json_stream_futures.size());
             records_processed ++;  //TODO: I don't think this is thread safe.
             return Boolean.TRUE;
         } catch (Exception e) {
             e.printStackTrace();
             return Boolean.FALSE;
         }
+    }
+
+    private static Future<RecordMetadata> Publish(String key, String topic, JSONObject json) {
+
+        Properties props = new Properties();
+        // TODO: use a JSON serializer
+        props.put("key.serializer",
+                "org.apache.kafka.common.serialization.StringSerializer");
+        props.put("value.serializer",
+                "org.apache.kafka.common.serialization.StringSerializer");
+
+        KafkaProducer producer = new KafkaProducer<String, String>(props);
+//        System.out.println("Writing to topic " + topic + " from thread " + Thread.currentThread().getName() + ".");
+
+        ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topic, json.toString());
+
+        // Send the record to the producer client library.
+        return(producer.send(rec));
+
     }
 
     private static JSONObject parse(String record) throws ParseException {

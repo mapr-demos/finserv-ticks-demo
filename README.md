@@ -18,8 +18,11 @@ Run the following command on your MapR cluster:
 $ maprcli stream create -path /user/mapr/taq -produceperm p -consumeperm p -topicperm p -ttl 900
 ```
 
-In that command we created the topic with public permission since we want to be able to run producers and consumers from remote computers.
+In that command we created the topic with public permission since we want to be able to run producers and consumers from remote computers. Verify the stream was created with this command:
 
+```
+maprcli stream info -path /user/mapr/taq
+```
 
 ### Step 2: Create the topics
 
@@ -29,7 +32,7 @@ We only need one topic for this program. Topics are also created with the `maprc
 $ maprcli stream topic create -path /user/mapr/taq -topic trades -partitions 3
 ```
 
-Now, you can list the topic like this to make sure it was created:
+Verify the topic was created successfully with this command:
 
 ```
 $ maprcli stream topic list -path /taq
@@ -56,6 +59,8 @@ $ mvn package
 ...
 ```
 
+The JUnit tests can take a few minutes to complete. To build without them, run `mvn package -DskipTests` instead.
+
 The project create a jar with all external dependencies ( `./target/nyse-taq-streaming-1.0-jar-with-dependencies.jar` )
 
 
@@ -70,6 +75,11 @@ For example copy the program to your server using scp:
 scp ./target/nyse-taq-streaming-1.0-jar-with-dependencies.jar mapr@<YOUR_MAPR_CLUSTER>:/home/mapr
 ```
 
+I prefer to use `rsync` instead of `scp` because it's faster:
+
+```
+rsync -vapr --progress --stats --partial target/nyse-taq-streaming-1.0-jar-with-dependencies.jar mapr@10.200.1.101:~/
+```
 
 The producer will send a large number of messages to `/taq:trades`. Since there isn't
 any consumer running yet, nobody will receive the messages. 

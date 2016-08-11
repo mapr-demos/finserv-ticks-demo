@@ -3,14 +3,21 @@ package com.mapr.demo.finserv;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+
+import com.google.common.base.Charsets;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.serialization.StringSerializer;
+
 import java.io.IOException;
 import java.util.Properties;
 
 public class Producer {
 
     public static KafkaProducer producer;
+    static long records_processed = 0L;
 
     public static void main(String[] args) throws IOException {
         if (args.length < 3) {
@@ -31,35 +38,52 @@ public class Producer {
         FileReader fr = new FileReader(f);
         BufferedReader reader = new BufferedReader(fr);
         String line = reader.readLine();
-        long records_processed = 0L;
+
 
         try {
             long startTime = System.nanoTime();
             long last_update = 0;
 
             while (line != null) {
-                ProducerRecord<String, String> rec = new ProducerRecord<String, String>(topic, line);
+
+                long current_time = System.nanoTime();
+                String key = Long.toString(current_time);
+                ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, line.getBytes(Charsets.ISO_8859_1));
 
                 // Send the record to the producer client library.
-                producer.send(rec);
-                records_processed++;
+//                producer.send(rec);
+                producer.send(record,
+                        new Callback() {
+                            public void onCompletion(RecordMetadata metadata, Exception e) {
+                                records_processed++;
+                                if(e != null)
+                                    e.printStackTrace();
+                            }
+                        });
+
 
                 // Print performance stats once per second
-                if ((Math.floor(System.nanoTime() - startTime)/1e9) > last_update)
+                if ((Math.floor(current_time - startTime)/1e9) > last_update)
                 {
                     last_update ++;
                     producer.flush();
-                    Monitor.print_status(records_processed, 1, startTime);
+                    print_status(records_processed, 1, startTime);
                 }
                 line = reader.readLine();
             }
 
-        } catch (Throwable throwable) {
-            System.err.printf("%s", throwable.getStackTrace());
+        } catch (Exception e) {
+            System.err.println("ERROR: " + e);
         } finally {
-            producer.close();
+            producer.flush();
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
             System.out.println("Published " + records_processed + " messages to stream.");
             System.out.println("Finished.");
+            producer.close();
         }
     }
 
@@ -71,11 +95,16 @@ public class Producer {
         props.put("key.serializer",
                 "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer",
-                "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("auto.create.topics.enable", true);
-        System.out.println("auto.create.topics.enable = " + props.getProperty("auto.create.topics.enable"));
+                "org.apache.kafka.common.serialization.ByteArraySerializer");
 
         producer = new KafkaProducer<String, String>(props);
     }
 
+    public static void print_status(long records_processed, int poolSize, long startTime) {
+        long elapsedTime = System.nanoTime() - startTime;
+        System.out.printf("Throughput = %.2f Kmsgs/sec published. Threads = %d. Total published = %d.\n",
+                records_processed / ((double) elapsedTime / 1000000000.0) / 1000,
+                poolSize,
+                records_processed);
+    }
 }
