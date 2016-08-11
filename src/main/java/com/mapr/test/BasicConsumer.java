@@ -60,7 +60,7 @@ public class BasicConsumer {
                 if (records.count() == 0) {
                     if (printme) {
                         System.out.println("No messages after " + pollTimeOut / 1000 + "s. Total msgs consumed = " +
-                                records_processed + " over " + Math.round(elapsed_time) + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s" + ". Average msg latency = " + latency_total/records_processed + "s");
+                                records_processed + " over " + Math.round(elapsed_time) + "s. Average msg latency = " + latency_total/records_processed + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s");
                         printme = false;
                     }
                 }
@@ -80,7 +80,7 @@ public class BasicConsumer {
                             last_update ++;
 
                             System.out.println("Total msgs consumed = " +
-                                    records_processed + " over " + Math.round(elapsed_time) + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s" + ". Average msg latency = " + latency_total/records_processed + "s");
+                                    records_processed + " over " + Math.round(elapsed_time) + "s. Average msg latency = " + latency_total/records_processed + "s. Average ingest rate = " + Math.round(records_processed / elapsed_time / 1000) + "Kmsgs/s");
                         }
 
                         if (VERBOSE) {
