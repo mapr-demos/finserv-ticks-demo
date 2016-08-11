@@ -15,16 +15,17 @@ public class Consumer implements Runnable {
 
     private static long json_messages_published = 0L;
     private static long raw_records_parsed = 0L;
-    private static boolean printme = false;
+
     private static long start_time;
-    private static TreeSet<String> json_topics = new TreeSet<>();
+    private static TreeSet<String> sender_topics = new TreeSet<>();
+    private static TreeSet<String> receiver_topics = new TreeSet<>();
 
     private KafkaConsumer consumer;
     private KafkaProducer producer;
     private String topic;
 
     private long my_json_messages_published = 0L;
-    private int my_last_update = 0;
+    private long my_last_update = 0;
 
     public Consumer(String topic) {
         this.topic = topic;
@@ -40,14 +41,31 @@ public class Consumer implements Runnable {
 
         }
 
-        String topic =  args[1] ;
-        System.out.println("Subscribed to : "+ topic);
+        String topic = args[1];
+        System.out.println("Subscribed to : " + topic);
 
         start_time = System.nanoTime();
-        printme = false;
         System.out.println("Spawning " + NUM_THREADS + " consumer threads");
+        List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < NUM_THREADS; i++)
-            new Thread(new Consumer(topic)).start();
+            threads.add(new Thread(new Consumer(topic)));
+        threads.forEach(thread -> thread.start());
+
+        // Sometimes threads encounter a fatal exception. If that happens, create a new worker thread.
+        while(true) {
+            for (int i = 0; i < threads.size(); i++) {
+                if (!(threads.get(i).isAlive())) {
+                    System.out.println("Replacing dead thread.");
+                    threads.set(i, new Thread(new Consumer(topic)));
+                    threads.get(i).start();
+                }
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     private void configureProducer() {
@@ -81,7 +99,7 @@ public class Consumer implements Runnable {
         // TODO: Is it okay for the listener #1 to potentially persist duplicate messages?
 
         double elapsed_time;
-        long my_total_json_messages_published = 0L;
+        boolean printme = false;        long my_total_json_messages_published = 0L;
         long my_raw_records_parsed = 0L;
         configureConsumer();
         configureProducer();
@@ -101,11 +119,13 @@ public class Consumer implements Runnable {
                     synchronized (this) {
                         if (printme) {
                             producer.flush();
-                            System.out.println("----- No messages after " + POLL_INTERVAL / 1000 + "s. Raw consumed (all threads) = " +
+                            System.out.println("----- " + Thread.currentThread().getName() + " has seen zero messages in " + POLL_INTERVAL / 1000 + "s. Raw consumed (all threads) = " +
                                     raw_records_parsed + ". JSON published (all threads) = " + json_messages_published + " -----");
 
-                            System.out.println("JSON topics:");
-                            json_topics.forEach(t -> System.out.println("\t" + t));
+                            System.out.println("Sender topics:");
+                            sender_topics.forEach(t -> System.out.println("\t" + t));
+                            System.out.println("Receiver topics:");
+                            receiver_topics.forEach(t -> System.out.println("\t" + t));
                             System.out.flush();
                             printme = false;
                         }
@@ -115,16 +135,14 @@ public class Consumer implements Runnable {
                         // Oh! We're getting messages again. Reset metric counters.
                         synchronized (this) {
                             // Check printme flag again since we're now synchronized
-                            if (!printme) {
-                                raw_records_parsed = 0;
-                                my_raw_records_parsed = 0;
-                                json_messages_published = 0;
-                                my_json_messages_published = 0;
-                                my_total_json_messages_published = 0;
-                                start_time = System.nanoTime();
-                                my_last_update = 0;
-                                printme = true;
-                            }
+                            raw_records_parsed = 0;
+                            my_raw_records_parsed = 0;
+                            json_messages_published = 0;
+                            my_json_messages_published = 0;
+                            my_total_json_messages_published = 0;
+                            start_time = System.nanoTime();
+                            my_last_update = 0;
+                            printme = true;
                         }
                     }
                 }
@@ -137,7 +155,7 @@ public class Consumer implements Runnable {
 
                     // update metrics and print status once per second on each thread
                     elapsed_time = (System.nanoTime() - start_time) / 1e9;
-                    if (Math.floor(elapsed_time) > my_last_update) {
+                    if (Math.round(elapsed_time) > my_last_update) {
                         // update metrics
                         synchronized (this) {
                             raw_records_parsed += my_raw_records_parsed;
@@ -145,25 +163,25 @@ public class Consumer implements Runnable {
                         }
 
                         // print status
-                        System.out.printf("t=%.0fs. JSON messages published = %d. Thruput = %.2f Kmsgs/sec -----\n",
+                        System.out.printf("----- t=%.0fs. Total messages published = %d. Throughput= %.2f Kmsgs/sec -----\n",
                                 elapsed_time,
                                 json_messages_published,
                                 json_messages_published / elapsed_time / 1000);
-                        System.out.printf("\t" + Thread.currentThread().getName() + ": JSON messages published = %d. Thruput = %.2f Kmsgs/sec\n",
+                        System.out.printf("\t" + Thread.currentThread().getName() + " published %d. Tput = %.2f Kmsgs/sec\n",
                                 my_total_json_messages_published,
                                 my_total_json_messages_published / elapsed_time / 1000);
 
                         my_raw_records_parsed = 0;
                         my_total_json_messages_published += my_json_messages_published;
                         my_json_messages_published = 0;
-                        my_last_update++;
+                        my_last_update = Math.round(elapsed_time);
 
                     }
                 }
             }
 
         } catch (Exception e) {
-            System.err.printf("%s", e.getStackTrace());
+            System.err.printf("ERROR: %s\n", e.getStackTrace());
         } finally {
             consumer.close();
             System.out.println("Consumed " + raw_records_parsed + " messages from stream (all threads).");
@@ -171,15 +189,27 @@ public class Consumer implements Runnable {
         }
     }
 
-    private void streamJSON(String key, Tick json) {
-        String jsontopic = "/user/mapr/taq:"+json.getSender();
-        json_topics.add(jsontopic);
-        ProducerRecord<String, String> rec = new ProducerRecord<>(jsontopic, key, json.toString());
+    private void streamJSON(String key, Tick tick) {
+        ProducerRecord<String, String> record;
+
+        sender_topics.add("/user/mapr/taq:" + tick.getSender());
+        record = new ProducerRecord<>("/user/mapr/taq:" + tick.getSender(), key, tick.toString());
+        publish (record);
+
+        for (String receiver : tick.getReceivers())
+        {
+            receiver_topics.add("/user/mapr/taq:" + receiver);
+            record = new ProducerRecord<>("/user/mapr/taq:" + receiver, key, tick.toString());
+            publish (record);
+        }
+    }
+
+    private void publish(ProducerRecord<String, String> rec) {
         // Non-blocking send. Callback invoked when request is complete.
         producer.send(rec,
                 new Callback() {
                     public void onCompletion(RecordMetadata metadata, Exception e) {
-                        if(metadata == null || e != null) {
+                        if (metadata == null || e != null) {
                             // If there appears to have been an error, decrement our counter metric
                             my_json_messages_published--;
                             e.printStackTrace();
