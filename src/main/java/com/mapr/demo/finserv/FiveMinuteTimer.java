@@ -17,7 +17,7 @@ import java.util.TreeSet;
  */
 public class FiveMinuteTimer implements Runnable  {
 //    private static final int PERIOD = 300*1000;  // 5 minutes
-    private static final int PERIOD = 10000;
+    private static final int PERIOD = 10000;  // TODO: change this to 5 minutes
     public static KafkaProducer producer;
     private int count = 0;
     private static TreeSet<String> offset_topics = new TreeSet<>();
@@ -31,9 +31,9 @@ public class FiveMinuteTimer implements Runnable  {
         while (true) {
             try {
                 Thread.sleep(PERIOD);
-                if (Consumer.offset_cache != null) {
-                    for (Tuple key : Consumer.offset_cache.keySet()) {
-                        OffsetTracker offset = Consumer.offset_cache.get(key);
+                if (TopicRouter.offset_cache != null) {
+                    for (Tuple key : TopicRouter.offset_cache.keySet()) {
+                        OffsetTracker offset = TopicRouter.offset_cache.get(key);
                         String topic = offset.topic+"-offset";
 
                         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HHmmssSSS");
@@ -47,7 +47,7 @@ public class FiveMinuteTimer implements Runnable  {
                                         e.printStackTrace();
                                     }
                                     else {
-                                        Consumer.offset_cache.remove(key);
+                                        TopicRouter.offset_cache.remove(key);
                                         count ++;
                                         offset_topics.add(topic);
 //                                        System.out.println(topic + " " + timestamp.toString() + " " + offset.offset);

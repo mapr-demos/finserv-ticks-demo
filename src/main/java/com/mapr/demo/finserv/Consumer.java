@@ -9,6 +9,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Consumer implements Runnable {
     private static final long POLL_INTERVAL = 5000;  // milliseconds
@@ -18,16 +19,17 @@ public class Consumer implements Runnable {
     private static long raw_records_parsed = 0L;
 
     private static long start_time;
+
     private static TreeSet<String> sender_topics = new TreeSet<>();
     private static TreeSet<String> receiver_topics = new TreeSet<>();
+
+    static ConcurrentLinkedQueue<ProducerRecord<String, byte[]>> unrouted_messages = new ConcurrentLinkedQueue<>();
 
     private KafkaConsumer consumer;
     private KafkaProducer producer;
     private String topic;
 
-    static ConcurrentHashMap<Tuple, OffsetTracker> offset_cache = new ConcurrentHashMap<>();
-
-    private long my_json_messages_published = 0L;
+    private long my_json_messages_processed = 0L;
     private long my_last_update = 0;
 
     public Consumer(String topic) {
@@ -54,7 +56,21 @@ public class Consumer implements Runnable {
         List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < NUM_THREADS; i++)
             threads.add(new Thread(new Consumer(topic)));
-        threads.add(new Thread(new FiveMinuteTimer()));
+
+        // Create a thread to route each message to the topics belonging to each sender and receiver id
+
+        Thread topic_router = new Thread(new TopicRouter());
+        topic_router.setName("Topic Router");
+        threads.add(topic_router);
+//        Thread topic_router2 = new Thread(new TopicRouter());
+//        topic_router.setName("Topic Router2");
+//        threads.add(topic_router2);
+        // Create a thread to persist offsets for fast lookup into each topic.
+        Thread offset_recorded = new Thread(new FiveMinuteTimer());
+        topic_router.setName("Offset Recorder");
+        threads.add(offset_recorded);
+
+        // Start all the threads
         threads.forEach(thread -> thread.start());
 
         // Sometimes threads encounter a fatal exception. If that happens, create a new worker thread.
@@ -105,7 +121,7 @@ public class Consumer implements Runnable {
         // TODO: Is it okay for the listener #1 to potentially persist duplicate messages?
 
         double elapsed_time;
-        boolean printme = false;        long my_total_json_messages_published = 0L;
+        boolean printme = false;        long my_total_json_messages_processed = 0L;
         long my_raw_records_parsed = 0L;
         configureConsumer();
         configureProducer();
@@ -148,8 +164,8 @@ public class Consumer implements Runnable {
                             raw_records_parsed = 0;
                             my_raw_records_parsed = 0;
                             json_messages_published = 0;
-                            my_json_messages_published = 0;
-                            my_total_json_messages_published = 0;
+                            my_json_messages_processed = 0;
+                            my_total_json_messages_processed = 0;
                             start_time = System.nanoTime();
                             my_last_update = 0;
                             printme = true;
@@ -158,10 +174,9 @@ public class Consumer implements Runnable {
                 }
 
                 for (ConsumerRecord<String, byte[]> record : records) {
-                    Tick json = new Tick(record.value());
                     my_raw_records_parsed++;
-                    routeToTopic(record.key(), json);
-                    my_json_messages_published++;
+                    routeToTopic(record);
+                    my_json_messages_processed++;
 
                     // update metrics and print status once per second on each thread
                     elapsed_time = (System.nanoTime() - start_time) / 1e9;
@@ -169,7 +184,7 @@ public class Consumer implements Runnable {
                         // update metrics
                         synchronized (this) {
                             raw_records_parsed += my_raw_records_parsed;
-                            json_messages_published += my_json_messages_published;
+                            json_messages_published += my_json_messages_processed;
                         }
 
                         // print status
@@ -178,12 +193,12 @@ public class Consumer implements Runnable {
                                 json_messages_published,
                                 json_messages_published / elapsed_time / 1000);
                         System.out.printf("\t" + Thread.currentThread().getName() + " published %d. Tput = %.2f Kmsgs/sec\n",
-                                my_total_json_messages_published,
-                                my_total_json_messages_published / elapsed_time / 1000);
+                                my_total_json_messages_processed,
+                                my_total_json_messages_processed / elapsed_time / 1000);
 
                         my_raw_records_parsed = 0;
-                        my_total_json_messages_published += my_json_messages_published;
-                        my_json_messages_published = 0;
+                        my_total_json_messages_processed += my_json_messages_processed;
+                        my_json_messages_processed = 0;
                         my_last_update = Math.round(elapsed_time);
 
                     }
@@ -199,44 +214,50 @@ public class Consumer implements Runnable {
         }
     }
 
-    private void routeToTopic(String key, Tick tick) {
-        ProducerRecord<String, byte[]> record;
-
+    private void routeToTopic(ConsumerRecord<String, byte[]> raw_record) {
+        Tick tick = new Tick(raw_record.value());
         String topic = "/user/mapr/taq:sender_" + tick.getSender();
         sender_topics.add(topic);
-        publish (topic, key, tick.getData());
+        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic,tick.getData());
+//        publish (topic, key, tick.getData());
+        unrouted_messages.add(record);
         // TODO: save record to maprdb
 
         for (String receiver : tick.getReceivers())
         {
             topic = "/user/mapr/taq:receiver_" + receiver;
             receiver_topics.add(topic);
-            publish (topic, key, tick.getData());
+            record = new ProducerRecord<>(topic,tick.getData());
+            unrouted_messages.add(record);
+//            publish (topic, key, tick.getData());
 
             // TODO: save record to maprdb
 
         }
     }
 
-    private void publish(String topic, String key, byte[] data) {
-        // Non-blocking send. Callback invoked when request is complete.
-        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, data);
-        producer.send(record,
-                new Callback() {
-                    public void onCompletion(RecordMetadata metadata, Exception e) {
-                        if (metadata == null || e != null) {
-                            // If there appears to have been an error, decrement our counter metric
-                            my_json_messages_published--;
-                            e.printStackTrace();
-                        } else {
-                            OffsetTracker offset = new OffsetTracker();
-                            offset.topic = metadata.topic();
-                            offset.partition = metadata.partition();
-                            offset.offset = metadata.offset();
-                            offset.timestamp = new Tick(data).getDate();
-                            offset_cache.putIfAbsent(new Tuple<>(metadata.topic(), metadata.partition()), offset);
-                        }
-                    }
-                });
-    }
+//    private void publish(String topic, String key, byte[] data) {
+//        // Non-blocking send. Callback invoked when request is complete.
+//        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, data);
+//        producer.send(record,
+//                new Callback() {
+//                    public void onCompletion(RecordMetadata metadata, Exception e) {
+//                        if (metadata == null || e != null) {
+//                            // If there appears to have been an error, decrement our counter metric
+//                            my_json_messages_processed--;
+//                            e.printStackTrace();
+//                        } else {
+//                            Tuple key = new Tuple<>(metadata.topic(), metadata.partition());
+//                            if (!offset_cache.containsKey(key)) {
+//                                OffsetTracker offset = new OffsetTracker();
+//                                offset.topic = metadata.topic();
+//                                offset.partition = metadata.partition();
+//                                offset.offset = metadata.offset();
+//                                offset.timestamp = new Tick(data).getDate();
+//                                offset_cache.put(key, offset);
+//                            }
+//                        }
+//                    }
+//                });
+//    }
 }
