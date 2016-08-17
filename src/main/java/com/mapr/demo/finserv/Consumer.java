@@ -229,12 +229,12 @@ public class Consumer implements Runnable {
                             my_json_messages_published--;
                             e.printStackTrace();
                         } else {
-//                            OffsetTracker offset = new OffsetTracker();
-//                            offset.topic = metadata.topic();
-//                            offset.partition = metadata.partition();
-//                            offset.offset = metadata.offset();
-//                            offset.timestamp = new Tick(data).getDate();
-//                            offset_cache.putIfAbsent(new Tuple<>(metadata.topic(), metadata.partition()), offset);
+                            OffsetTracker offset = new OffsetTracker();
+                            offset.topic = metadata.topic();
+                            offset.partition = metadata.partition();
+                            offset.offset = metadata.offset();
+                            offset.timestamp = new Tick(data).getDate();
+                            offset_cache.putIfAbsent(new Tuple<>(metadata.topic(), metadata.partition()), offset);
                         }
                     }
                 });

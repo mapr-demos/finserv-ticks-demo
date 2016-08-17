@@ -30,7 +30,6 @@ public class FiveMinuteTimer implements Runnable  {
         // TODO: every 5 minutes, save offset and timestamp for each topic
         while (true) {
             try {
-                System.out.println("Recorded " + count + " offsets for " + offset_topics.size() + " topics, so far.");
                 Thread.sleep(PERIOD);
                 if (Consumer.offset_cache != null) {
                     for (Tuple key : Consumer.offset_cache.keySet()) {
@@ -57,7 +56,7 @@ public class FiveMinuteTimer implements Runnable  {
                             });
                     }
                 }
-
+                System.out.println("Recorded " + count + " offsets for " + offset_topics.size() + " topics, so far.");
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
