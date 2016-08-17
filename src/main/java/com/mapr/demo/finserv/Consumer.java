@@ -8,10 +8,11 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Consumer implements Runnable {
     private static final long POLL_INTERVAL = 5000;  // milliseconds
-    private static final int NUM_THREADS = 2;
+    private static int NUM_THREADS = 1;
 
     private static long json_messages_published = 0L;
     private static long raw_records_parsed = 0L;
@@ -24,6 +25,8 @@ public class Consumer implements Runnable {
     private KafkaProducer producer;
     private String topic;
 
+    static ConcurrentHashMap<Tuple, OffsetTracker> offset_cache = new ConcurrentHashMap<>();
+
     private long my_json_messages_published = 0L;
     private long my_last_update = 0;
 
@@ -35,20 +38,23 @@ public class Consumer implements Runnable {
         if (args.length < 2) {
             System.err.println("ERROR: You must specify a stream:topic to consume data from.");
             System.err.println("USAGE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic]\n" +
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [NUM_THREADS]\n" +
                     "Example:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer  /usr/mapr/taq:trades");
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer /usr/mapr/taq:trades 2");
 
         }
 
         String topic = args[1];
         System.out.println("Subscribed to : " + topic);
+        if (args.length == 3)
+            NUM_THREADS = Integer.valueOf(args[2]);
 
         start_time = System.nanoTime();
         System.out.println("Spawning " + NUM_THREADS + " consumer threads");
         List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < NUM_THREADS; i++)
             threads.add(new Thread(new Consumer(topic)));
+        threads.add(new Thread(new FiveMinuteTimer()));
         threads.forEach(thread -> thread.start());
 
         // Sometimes threads encounter a fatal exception. If that happens, create a new worker thread.
@@ -126,10 +132,10 @@ public class Consumer implements Runnable {
                                     raw_records_parsed + ". JSON published (all threads) = " +
                                     json_messages_published  + " ==========");
 
-                            System.out.println("Sender topics:");
-                            sender_topics.forEach(t -> System.out.println("\t" + t));
-                            System.out.println("Receiver topics:");
-                            receiver_topics.forEach(t -> System.out.println("\t" + t));
+                            System.out.println(sender_topics.size() + " sender topics:");
+//                            sender_topics.forEach(t -> System.out.println("\t" + t));
+                            System.out.println(receiver_topics.size() + " receiver topics:");
+//                            receiver_topics.forEach(t -> System.out.println("\t" + t));
                             System.out.flush();
                             printme = false;
                         }
@@ -196,20 +202,25 @@ public class Consumer implements Runnable {
     private void routeToTopic(String key, Tick tick) {
         ProducerRecord<String, byte[]> record;
 
-        sender_topics.add("/user/mapr/taq:" + tick.getSender());
-        record = new ProducerRecord<>("/user/mapr/taq:" + tick.getSender(), key, tick.getData());
-        publish (record);
+        String topic = "/user/mapr/taq:sender_" + tick.getSender();
+        sender_topics.add(topic);
+        publish (topic, key, tick.getData());
+        // TODO: save record to maprdb
 
         for (String receiver : tick.getReceivers())
         {
-            receiver_topics.add("/user/mapr/taq:" + receiver);
-            record = new ProducerRecord<>("/user/mapr/taq:" + receiver, key, tick.getData());
-            publish (record);
+            topic = "/user/mapr/taq:receiver_" + receiver;
+            receiver_topics.add(topic);
+            publish (topic, key, tick.getData());
+
+            // TODO: save record to maprdb
+
         }
     }
 
-    private void publish(ProducerRecord<String, byte[]> record) {
+    private void publish(String topic, String key, byte[] data) {
         // Non-blocking send. Callback invoked when request is complete.
+        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, data);
         producer.send(record,
                 new Callback() {
                     public void onCompletion(RecordMetadata metadata, Exception e) {
@@ -217,6 +228,13 @@ public class Consumer implements Runnable {
                             // If there appears to have been an error, decrement our counter metric
                             my_json_messages_published--;
                             e.printStackTrace();
+                        } else {
+//                            OffsetTracker offset = new OffsetTracker();
+//                            offset.topic = metadata.topic();
+//                            offset.partition = metadata.partition();
+//                            offset.offset = metadata.offset();
+//                            offset.timestamp = new Tick(data).getDate();
+//                            offset_cache.putIfAbsent(new Tuple<>(metadata.topic(), metadata.partition()), offset);
                         }
                     }
                 });

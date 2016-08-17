@@ -106,12 +106,12 @@ The command-line argument `data/taqtrade20131218` refers to the source file cont
 
 In another window you can run the consumer using the following command:
 
-```java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic]```
+```java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [num_threads]```
 
 For example,
 
 ```
-$ java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer /user/mapr/taq:trades
+$ java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer /user/mapr/taq:trades 2
 Sent msg number 0
 Sent msg number 1000
 ...
