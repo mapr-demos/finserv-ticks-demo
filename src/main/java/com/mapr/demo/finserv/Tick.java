@@ -92,7 +92,7 @@ public class Tick implements Serializable {
     @JsonProperty("receiver-list")
     List<String> getReceivers() {
         List<String> receivers = new ArrayList<>();
-        for (int i=0; data.length >= 78 + i*4; i++) {
+        for (int i=0; data.length >= 79 + i*4; i++) {
             receivers.add(new String(data, 75 + i*4, 4));
         }
         return receivers;
