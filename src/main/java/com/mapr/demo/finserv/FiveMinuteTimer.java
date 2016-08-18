@@ -56,7 +56,7 @@ public class FiveMinuteTimer implements Runnable  {
                             });
                     }
                 }
-                System.out.println("Recorded " + count + " offsets for " + offset_topics.size() + " topics, so far.");
+                System.out.println("\tRecorded " + count + " offsets for " + offset_topics.size() + " topics, so far.");
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

@@ -78,7 +78,8 @@ public class BasicConsumer {
                     }
                     for (ConsumerRecord<String, byte[]> record : records) {
                         records_processed++;
-                        latency_total = latency_total + (current_time - Long.valueOf(record.key()))/1e9;
+                        if (record.key() != null)
+                            latency_total = latency_total + (current_time - Long.valueOf(record.key()))/1e9;
                         if ((Math.floor(current_time - start_time)/1e9) > last_update)
                         {
                             last_update ++;
@@ -90,19 +91,21 @@ public class BasicConsumer {
                                     Math.round(records_processed / elapsed_time / 1000));
                         }
 
-                        if (VERBOSE) {
-                            System.out.printf("\tconsumed: '%s'\n" +
-                                            "\t\tdelay = %.2fs\n" +
-                                            "\t\ttopic = %s\n" +
-                                            "\t\tpartition = %d\n" +
-                                            "\t\tkey = %s\n" +
-                                            "\t\toffset = %d\n",
-                                    record.value(),
-                                    (current_time - Long.valueOf(record.key()))/1e9,
-                                    record.topic(),
-                                    record.partition(),
-                                    record.key(),
-                                    record.offset());
+                        if (record.key() != null) {
+                            if (VERBOSE) {
+                                System.out.printf("\tconsumed: '%s'\n" +
+                                                "\t\tdelay = %.2fs\n" +
+                                                "\t\ttopic = %s\n" +
+                                                "\t\tpartition = %d\n" +
+                                                "\t\tkey = %s\n" +
+                                                "\t\toffset = %d\n",
+                                        record.value(),
+                                        (current_time - Long.valueOf(record.key())) / 1e9,
+                                        record.topic(),
+                                        record.partition(),
+                                        record.key(),
+                                        record.offset());
+                            }
                             System.out.println("\t\tTotal records consumed : " + records_processed);
                         }
 
@@ -117,8 +120,8 @@ public class BasicConsumer {
 
             }
 
-        } catch (Throwable throwable) {
-            System.err.printf("%s", throwable.getStackTrace());
+        } catch (Exception e) {
+            e.printStackTrace();
         } finally {
             consumer.close();
             System.out.println("\nConsumed " + records_processed + " messages from stream.");

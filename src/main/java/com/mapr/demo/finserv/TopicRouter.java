@@ -19,12 +19,17 @@ public class TopicRouter implements Runnable  {
     private static final int PERIOD = 1000;
     public static KafkaProducer producer;
     private long count = 0;
+    private long start_time;
+    private long my_last_update = 0;
     static ConcurrentHashMap<Tuple, OffsetTracker> offset_cache = new ConcurrentHashMap<>();
 
     @Override
     public void run() {
+        start_time = System.nanoTime();
+        double elapsed_time;
         //configure producer
         configureProducer();
+        System.out.println(Thread.currentThread().getName() + " thread is routing messages to sender and receiver topics");
 
         while (true) {
             ProducerRecord<String, byte[]> record = Consumer.unrouted_messages.poll();
@@ -48,9 +53,17 @@ public class TopicRouter implements Runnable  {
                                 }
                             }
                         });
+                elapsed_time = (System.nanoTime() - start_time) / 1e9;
+                if (Math.round(elapsed_time) > my_last_update) {
+                    System.out.println("\tRouted " + count + " messages to sender/receiver topics, at rate " + Math.round(count / elapsed_time / 1000) + "Kmsgs/sec");
+                    my_last_update = Math.round(elapsed_time);
+                }
             } else {
                 try {
-                    System.out.println("Routed " + count + " messages to sender/receiver topics, so far.");
+                    System.out.println("Routed " + count + " messages to sender/receiver topics. Resetting metrics.");
+                    count = 0;
+                    start_time = System.nanoTime();
+                    my_last_update = 0;
                     Thread.sleep(PERIOD);
                 } catch (InterruptedException e) {
                     e.printStackTrace();

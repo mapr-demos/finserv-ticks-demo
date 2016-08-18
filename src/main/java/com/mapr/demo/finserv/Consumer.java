@@ -149,9 +149,11 @@ public class Consumer implements Runnable {
                                     json_messages_published  + " ==========");
 
                             System.out.println(sender_topics.size() + " sender topics:");
-//                            sender_topics.forEach(t -> System.out.println("\t" + t));
+//                            sender_topics.forEach(t -> System.out.print(t + " "));
+//                            System.out.println("\n");
                             System.out.println(receiver_topics.size() + " receiver topics:");
-//                            receiver_topics.forEach(t -> System.out.println("\t" + t));
+//                            receiver_topics.forEach(t -> System.out.print(t + " "));
+//                            System.out.println("\n");
                             System.out.flush();
                             printme = false;
                         }
@@ -217,8 +219,9 @@ public class Consumer implements Runnable {
     private void routeToTopic(ConsumerRecord<String, byte[]> raw_record) {
         Tick tick = new Tick(raw_record.value());
         String topic = "/user/mapr/taq:sender_" + tick.getSender();
+        String key = raw_record.key();  // We're using the key to calculate message latency
         sender_topics.add(topic);
-        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic,tick.getData());
+        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic,key,tick.getData());
 //        publish (topic, key, tick.getData());
         unrouted_messages.add(record);
         // TODO: save record to maprdb
@@ -227,7 +230,7 @@ public class Consumer implements Runnable {
         {
             topic = "/user/mapr/taq:receiver_" + receiver;
             receiver_topics.add(topic);
-            record = new ProducerRecord<>(topic,tick.getData());
+            record = new ProducerRecord<>(topic,key,tick.getData());
             unrouted_messages.add(record);
 //            publish (topic, key, tick.getData());
 
