@@ -30,10 +30,6 @@ public class Tuple<X, Y> {
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((x == null) ? 0 : x.hashCode());
-        result = prime * result + ((y == null) ? 0 : y.hashCode());
-        return result;
+        return (x.hashCode() + y.hashCode());
     }
 }
