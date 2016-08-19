@@ -46,7 +46,7 @@ public class BasicConsumer {
         configureConsumer();
 
         consumer.subscribe(topics);
-        long pollTimeOut = 5000;  // milliseconds
+        long pollTimeOut = 60000;  // milliseconds
         boolean printme = false;
         long start_time = 0;
         long last_update = 0;
@@ -66,6 +66,8 @@ public class BasicConsumer {
                                 latency_total/records_processed,
                                 Math.round(records_processed / elapsed_time / 1000));
                         printme = false;
+                        System.out.println("Exiting...");
+                        System.exit(0);
                     }
                 }
                 if (records.count() > 0) {
@@ -78,6 +80,7 @@ public class BasicConsumer {
                     }
                     for (ConsumerRecord<String, byte[]> record : records) {
                         records_processed++;
+                        // NOTE: latency will not be accurate if the consumer is not running on the same server as the producer
                         if (record.key() != null)
                             latency_total = latency_total + (current_time - Long.valueOf(record.key()))/1e9;
                         if ((Math.floor(current_time - start_time)/1e9) > last_update)
@@ -90,7 +93,6 @@ public class BasicConsumer {
                                     latency_total/records_processed,
                                     Math.round(records_processed / elapsed_time / 1000));
                         }
-
                         if (record.key() != null) {
                             if (VERBOSE) {
                                 System.out.printf("\tconsumed: '%s'\n" +
@@ -105,8 +107,11 @@ public class BasicConsumer {
                                         record.partition(),
                                         record.key(),
                                         record.offset());
+                                System.out.println("\t\tTotal records consumed : " + records_processed);
+                                System.out.println("\t\tElapsed time : " + elapsed_time);
+                                System.out.println("\t\tWall clock : " + System.nanoTime());
+
                             }
-                            System.out.println("\t\tTotal records consumed : " + records_processed);
                         }
 
                         if (record.value().equals("q")) {

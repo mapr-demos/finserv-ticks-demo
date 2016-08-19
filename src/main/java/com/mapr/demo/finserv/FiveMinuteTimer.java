@@ -16,8 +16,8 @@ import java.util.TreeSet;
  * Created by idownard on 8/16/16.
  */
 public class FiveMinuteTimer implements Runnable  {
-//    private static final int PERIOD = 300*1000;  // 5 minutes
-    private static final int PERIOD = 10000;  // TODO: change this to 5 minutes
+    private static final int PERIOD = 300*1000;  // 5 minutes
+//    private static final int PERIOD = 10000;  // TODO: change this to 5 minutes
     public static KafkaProducer producer;
     private int count = 0;
     private static TreeSet<String> offset_topics = new TreeSet<>();
