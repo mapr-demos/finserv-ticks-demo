@@ -136,3 +136,25 @@ When you are done, you can delete the stream, and all associated topic using the
 ```
 $ maprcli stream delete -path /taq
 ```
+
+# Testing Speeds for Different Configurations
+There are several unit tests that don't so much test anything as produce speed data
+so that different configurations of producer threads can be adjusted to get optimal 
+performance under different conditions. 
+
+To run these tests do this in the top-level directory:
+
+    mvn -e -Dtest=TopicCountGridSearchTest,ThreadCountSpeedTest test
+
+This will create two data files, `thread-count.csv` and `topic-count.csv`. These files can be visualized 
+by running an analysis script:
+
+    Rscript src/test/R/draw-speed-graphs.r 
+
+This will create PNG images with figures something like these that we
+produced on our test cluster:
+
+
+![Effect of thread count on performance](images/thread.png)
+
+![Effect of buffer size on performance](images/topics.png)
