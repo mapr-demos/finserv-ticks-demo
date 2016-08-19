@@ -14,16 +14,18 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class Consumer implements Runnable {
     private static final long POLL_INTERVAL = 5000;  // milliseconds
     private static int NUM_THREADS = 1;
+    static boolean VERBOSE = false;
 
     private static long json_messages_published = 0L;
     private static long raw_records_parsed = 0L;
 
     private static long start_time;
 
-    private static TreeSet<String> sender_topics = new TreeSet<>();
-    private static TreeSet<String> receiver_topics = new TreeSet<>();
+    private static HashSet<String> sender_topics = new HashSet<>();
+    private static HashSet<String> receiver_topics = new HashSet<>();
 
-    static ConcurrentLinkedQueue<ProducerRecord<String, byte[]>> unrouted_messages = new ConcurrentLinkedQueue<>();
+//    static ConcurrentLinkedQueue<ProducerRecord<String, byte[]>> unrouted_messages = new ConcurrentLinkedQueue<>();
+    static Queue<ProducerRecord<String, byte[]>> unrouted_messages = new LinkedList<>();
 
     private KafkaConsumer consumer;
     private KafkaProducer producer;
@@ -40,15 +42,18 @@ public class Consumer implements Runnable {
         if (args.length < 2) {
             System.err.println("ERROR: You must specify a stream:topic to consume data from.");
             System.err.println("USAGE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [NUM_THREADS]\n" +
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [NUM_THREADS] [verbose]\n" +
                     "Example:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer /usr/mapr/taq:trades 2");
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer /usr/mapr/taq:trades 2 verbose");
 
         }
 
         String topic = args[1];
         System.out.println("Subscribed to : " + topic);
-        if (args.length == 3)
+        if ("verbose".equals(args[args.length-1])) VERBOSE=true;
+        if (args.length == 4)
+            NUM_THREADS = Integer.valueOf(args[2]);
+        if (args.length == 3 && !"verbose".equals(args[2]))
             NUM_THREADS = Integer.valueOf(args[2]);
 
         start_time = System.nanoTime();
@@ -148,11 +153,15 @@ public class Consumer implements Runnable {
                                     raw_records_parsed + ". JSON published (all threads) = " +
                                     json_messages_published  + " ==========");
 
-                            System.out.println(sender_topics.size() + " sender topics:");
-//                            sender_topics.forEach(t -> System.out.print(t + " "));
+//                            System.out.println(sender_topics.size() + " sender topics:");
+//                            List sorted_topics = new ArrayList(sender_topics);
+//                            Collections.sort(sorted_topics);
+//                            sorted_topics.forEach(t -> System.out.print(t + " "));
 //                            System.out.println("\n");
                             System.out.println(receiver_topics.size() + " receiver topics:");
-//                            receiver_topics.forEach(t -> System.out.print(t + " "));
+//                            List sorted_topics = new ArrayList(receiver_topics);
+//                            Collections.sort(sorted_topics);
+//                            sorted_topics.forEach(t -> System.out.print(t + " "));
 //                            System.out.println("\n");
                             System.out.flush();
                             printme = false;
@@ -219,24 +228,26 @@ public class Consumer implements Runnable {
     private void routeToTopic(ConsumerRecord<String, byte[]> raw_record) {
         Tick tick = new Tick(raw_record.value());
         String topic = "/user/mapr/taq:sender_" + tick.getSender();
-        String key = raw_record.key();  // We're using the key to calculate message latency
-        sender_topics.add(topic);
+//        String topic = "/user/mapr/taq:sender_TEST";
+        String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
+//        sender_topics.add(topic);     // Don't do this unless you're testing, because it adds overhead
         ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic,key,tick.getData());
 //        publish (topic, key, tick.getData());
         unrouted_messages.add(record);
         // TODO: save record to maprdb
-
-        for (String receiver : tick.getReceivers())
-        {
-            topic = "/user/mapr/taq:receiver_" + receiver;
-            receiver_topics.add(topic);
-            record = new ProducerRecord<>(topic,key,tick.getData());
-            unrouted_messages.add(record);
-//            publish (topic, key, tick.getData());
-
-            // TODO: save record to maprdb
-
+        for (int i=0; raw_record.value().length >= 79 + i*4; i++) {
+//            receiver_topics.add(new String(raw_record.value(), 75 + i*4, 4));     // uncomment for testing only
+            unrouted_messages.add(new ProducerRecord<>("/user/mapr/taq:receiver_"+(new String(raw_record.value(), 75 + i*4, 4)), key, tick.getData()));
         }
+
+//        for (String receiver : tick.getReceivers())
+//        {
+//            topic = "/user/mapr/taq:receiver_" + receiver;
+//            receiver_topics.add(topic);    // Don't do this unless you're testing, because it adds overhead
+//            record = new ProducerRecord<>(topic,key,tick.getData());
+//            unrouted_messages.add(record);
+//            // TODO: save record to maprdb
+//        }
     }
 
 //    private void publish(String topic, String key, byte[] data) {
