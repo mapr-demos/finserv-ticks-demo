@@ -4,10 +4,12 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 
+import com.google.common.base.Charsets;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.io.IOException;
 import java.util.Properties;
@@ -46,7 +48,7 @@ public class Producer {
 
                 long current_time = System.nanoTime();
                 String key = Long.toString(current_time);
-                ProducerRecord<String, String> record = new ProducerRecord<String, String>(topic, key, line);
+                ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, line.getBytes(Charsets.ISO_8859_1));
 
                 // Send the record to the producer client library.
 //                producer.send(rec);
@@ -70,8 +72,8 @@ public class Producer {
                 line = reader.readLine();
             }
 
-        } catch (Throwable throwable) {
-            System.err.printf("%s", throwable.getStackTrace());
+        } catch (Exception e) {
+            System.err.println("ERROR: " + e);
         } finally {
             producer.flush();
             try {
@@ -93,7 +95,7 @@ public class Producer {
         props.put("key.serializer",
                 "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer",
-                "org.apache.kafka.common.serialization.StringSerializer");
+                "org.apache.kafka.common.serialization.ByteArraySerializer");
 
         producer = new KafkaProducer<String, String>(props);
     }

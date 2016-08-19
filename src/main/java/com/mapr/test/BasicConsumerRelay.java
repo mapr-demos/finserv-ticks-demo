@@ -9,7 +9,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-import com.mapr.demo.finserv.Monitor;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;

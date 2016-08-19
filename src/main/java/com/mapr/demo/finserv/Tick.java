@@ -25,6 +25,8 @@ public class Tick implements Serializable {
         this.data = data.getBytes(Charsets.ISO_8859_1);
     }
 
+    public byte[] getData() { return this.data; }
+
     @JsonProperty("date")
     String getDate() {
         return new String(data, 0, 9);
