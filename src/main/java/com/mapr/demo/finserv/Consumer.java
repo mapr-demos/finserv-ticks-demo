@@ -110,7 +110,6 @@ public class Consumer implements Runnable {
         Properties props = new Properties();
         props.put("enable.auto.commit","true");
         props.put("group.id", "mapr-workshop");
-        props.put("max.poll.records", "1");
         props.put("key.deserializer",
                 "org.apache.kafka.common.serialization.StringDeserializer");
         //  which class to use to deserialize the value of each message
