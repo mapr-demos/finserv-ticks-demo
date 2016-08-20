@@ -16,6 +16,8 @@ public class Consumer implements Runnable {
     private static int NUM_THREADS = 1;
     static boolean VERBOSE = false;
 
+    static final ProducerRecord endRecord = new ProducerRecord("","",0);  // kill pill for topic router threads.
+
     private static long json_messages_published = 0L;
     private static long raw_records_parsed = 0L;
 
@@ -67,12 +69,10 @@ public class Consumer implements Runnable {
         Thread topic_router = new Thread(new TopicRouter());
         topic_router.setName("Topic Router");
         threads.add(topic_router);
-//        Thread topic_router2 = new Thread(new TopicRouter());
-//        topic_router.setName("Topic Router2");
-//        threads.add(topic_router2);
+
         // Create a thread to persist offsets for fast lookup into each topic.
         Thread offset_recorded = new Thread(new FiveMinuteTimer());
-        topic_router.setName("Offset Recorder");
+        offset_recorded.setName("Offset Recorder");
         threads.add(offset_recorded);
 
         // Start all the threads
@@ -110,6 +110,7 @@ public class Consumer implements Runnable {
         Properties props = new Properties();
         props.put("enable.auto.commit","true");
         props.put("group.id", "mapr-workshop");
+        props.put("max.poll.records", "1");
         props.put("key.deserializer",
                 "org.apache.kafka.common.serialization.StringDeserializer");
         //  which class to use to deserialize the value of each message
@@ -142,77 +143,77 @@ public class Consumer implements Runnable {
                 ConsumerRecords<String, byte[]> records;
                 // TODO: is poll() thread safe?
                 records = consumer.poll(POLL_INTERVAL);
-                if (records.count() == 0) {
-                    synchronized (this) {
-                        if (printme) {
-                            producer.flush();
-                            System.out.println("========== " +
-                                    Thread.currentThread().getName() +
-                                    " has seen zero messages in " + POLL_INTERVAL / 1000 +
-                                    "s. Raw consumed (all threads) = " +
-                                    raw_records_parsed + ". JSON published (all threads) = " +
-                                    json_messages_published  + " ==========");
-
-//                            System.out.println(sender_topics.size() + " sender topics:");
-//                            List sorted_topics = new ArrayList(sender_topics);
-//                            Collections.sort(sorted_topics);
-//                            sorted_topics.forEach(t -> System.out.print(t + " "));
-//                            System.out.println("\n");
-                            System.out.println(receiver_topics.size() + " receiver topics:");
-//                            List sorted_topics = new ArrayList(receiver_topics);
-//                            Collections.sort(sorted_topics);
-//                            sorted_topics.forEach(t -> System.out.print(t + " "));
-//                            System.out.println("\n");
-                            System.out.flush();
-                            printme = false;
-                        }
-                    }
-                } else {
-                    if (!printme) {
-                        // Oh! We're getting messages again. Reset metric counters.
-                        synchronized (this) {
-                            // Check printme flag again since we're now synchronized
-                            raw_records_parsed = 0;
-                            my_raw_records_parsed = 0;
-                            json_messages_published = 0;
-                            my_json_messages_processed = 0;
-                            my_total_json_messages_processed = 0;
-                            start_time = System.nanoTime();
-                            my_last_update = 0;
-                            printme = true;
-                        }
-                    }
-                }
+//                if (records.count() == 0) {
+//                    synchronized (this) {
+//                        if (printme) {
+////                            producer.flush();
+//                            System.out.println("========== " +
+//                                    Thread.currentThread().getName() +
+//                                    " has seen zero messages in " + POLL_INTERVAL / 1000 +
+//                                    "s. Raw consumed (all threads) = " +
+//                                    raw_records_parsed + ". JSON published (all threads) = " +
+//                                    json_messages_published  + " ==========");
+//
+////                            System.out.println(sender_topics.size() + " sender topics:");
+////                            List sorted_topics = new ArrayList(sender_topics);
+////                            Collections.sort(sorted_topics);
+////                            sorted_topics.forEach(t -> System.out.print(t + " "));
+////                            System.out.println("\n");
+//                            System.out.println(receiver_topics.size() + " receiver topics:");
+////                            List sorted_topics = new ArrayList(receiver_topics);
+////                            Collections.sort(sorted_topics);
+////                            sorted_topics.forEach(t -> System.out.print(t + " "));
+////                            System.out.println("\n");
+//                            System.out.flush();
+//                            printme = false;
+//                        }
+//                    }
+//                } else {
+//                    if (!printme) {
+//                        // Oh! We're getting messages again. Reset metric counters.
+//                        synchronized (this) {
+//                            // Check printme flag again since we're now synchronized
+//                            raw_records_parsed = 0;
+//                            my_raw_records_parsed = 0;
+//                            json_messages_published = 0;
+//                            my_json_messages_processed = 0;
+//                            my_total_json_messages_processed = 0;
+//                            start_time = System.nanoTime();
+//                            my_last_update = 0;
+//                            printme = true;
+//                        }
+//                    }
+//                }
 
                 for (ConsumerRecord<String, byte[]> record : records) {
-                    my_raw_records_parsed++;
+//                    my_raw_records_parsed++;
                     routeToTopic(record);
-                    my_json_messages_processed++;
+//                    my_json_messages_processed++;
 
-                    // update metrics and print status once per second on each thread
-                    elapsed_time = (System.nanoTime() - start_time) / 1e9;
-                    if (Math.round(elapsed_time) > my_last_update) {
-                        // update metrics
-                        synchronized (this) {
-                            raw_records_parsed += my_raw_records_parsed;
-                            json_messages_published += my_json_messages_processed;
-                        }
-
-                        // print status
-                        System.out.printf("----- t=%.0fs. Total messages published = %d. Throughput= %.2f Kmsgs/sec -----\n",
-                                elapsed_time,
-                                json_messages_published,
-                                json_messages_published / elapsed_time / 1000);
-                        System.out.printf("\t" + Thread.currentThread().getName() + " published %d. Tput = %.2f Kmsgs/sec\n",
-                                my_total_json_messages_processed,
-                                my_total_json_messages_processed / elapsed_time / 1000);
-
-                        my_raw_records_parsed = 0;
-                        my_total_json_messages_processed += my_json_messages_processed;
-                        my_json_messages_processed = 0;
-                        my_last_update = Math.round(elapsed_time);
-
-                    }
+//                    // update metrics and print status once per second on each thread
+//                    elapsed_time = (System.nanoTime() - start_time) / 1e9;
+//                    if (Math.round(elapsed_time) > my_last_update) {
+//                        // update metrics
+//                        synchronized (this) {
+//                            raw_records_parsed += my_raw_records_parsed;
+//                            json_messages_published += my_json_messages_processed;
+//                        }
+//
+//                        // print status
+//                        System.out.printf("----- t=%.0fs. Total messages published = %d. Throughput= %.2f Kmsgs/sec -----\n",
+//                                elapsed_time,
+//                                json_messages_published,
+//                                json_messages_published / elapsed_time / 1000);
+//                        System.out.printf("\t" + Thread.currentThread().getName() + " published %d. Tput = %.2f Kmsgs/sec\n",
+//                                my_total_json_messages_processed,
+//                                my_total_json_messages_processed / elapsed_time / 1000);
+//
+//                        my_raw_records_parsed = 0;
+//                        my_total_json_messages_processed += my_json_messages_processed;
+//                        my_json_messages_processed = 0;
+//                        my_last_update = Math.round(elapsed_time);
+//
+//                    }
                 }
             }
 
@@ -226,28 +227,19 @@ public class Consumer implements Runnable {
     }
 
     private void routeToTopic(ConsumerRecord<String, byte[]> raw_record) {
-        Tick tick = new Tick(raw_record.value());
-        String topic = "/user/mapr/taq:sender_" + tick.getSender();
-//        String topic = "/user/mapr/taq:sender_TEST";
         String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
-//        sender_topics.add(topic);     // Don't do this unless you're testing, because it adds overhead
-        ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic,key,tick.getData());
-//        publish (topic, key, tick.getData());
-        unrouted_messages.add(record);
-        // TODO: save record to maprdb
-        for (int i=0; raw_record.value().length >= 79 + i*4; i++) {
-//            receiver_topics.add(new String(raw_record.value(), 75 + i*4, 4));     // uncomment for testing only
-            unrouted_messages.add(new ProducerRecord<>("/user/mapr/taq:receiver_"+(new String(raw_record.value(), 75 + i*4, 4)), key, tick.getData()));
+        byte[] data = raw_record.value();
+        String sender_id = new String(data,71,4);
+
+        unrouted_messages.add(new ProducerRecord<>("/user/mapr/taq:sender_"+sender_id, key, data));
+        for (int i=0; (79 + i*4) <= data.length; i++) {
+            String receiver_id = new String(data, 75 + i*4, 4);
+            unrouted_messages.add(new ProducerRecord<>("/user/mapr/taq:receiver_"+receiver_id, key, data));
         }
 
-//        for (String receiver : tick.getReceivers())
-//        {
-//            topic = "/user/mapr/taq:receiver_" + receiver;
-//            receiver_topics.add(topic);    // Don't do this unless you're testing, because it adds overhead
-//            record = new ProducerRecord<>(topic,key,tick.getData());
-//            unrouted_messages.add(record);
-//            // TODO: save record to maprdb
-//        }
+//        sender_topics.add(topic);     // Don't do this unless you're testing, because it adds overhead
+
+
     }
 
 //    private void publish(String topic, String key, byte[] data) {
