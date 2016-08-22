@@ -141,7 +141,7 @@ Show me the depth of the trades topic:
 $ maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}'
 ```
 
-### Just for fun :simple_smile:
+### Just for fun:
 
 We can observe the status of our consumer like this:
 
