@@ -38,22 +38,24 @@ BID_ASK_SPREAD_UPPER = 0.1
 # range of how many receivers should be for each
 # bid + ask
 N_RECV_LOWER = 1
-N_RECV_UPPER = 3
+N_RECV_UPPER = 10
 
 # trades input file
-INPUT_FILE = "/home/mapr/nyse/taqtrade20131218"
+INPUT_FILE = "/home/mapr/finserv-ticks-demo/taqtrade20131218"
 
 # directory for per-second output files
-OUTPUT_DIR = "/home/mapr/test2/orig/finserv-ticks-demo/data/"
+OUTPUT_DIR = "/home/mapr/finserv-ticks-demo/data/"
 
 # expected length of a single record in the input
 LINELEN = 73
 
 # receiver and sender ID pools, along with their probabilities
-send_id  = range(1000, 1005)
-recv_id = range(1005, 1010)
-send_p = [0.1, 0.2, 0.2, 0.1, 0.4]
-recv_p = [0.2, 0.2, 0.3, 0.1, 0.2]
+send_id  = range(1000, 1999)
+recv_id = range(2000, 2999)
+
+# this makes an array with random numbers that sum to 1
+send_p = np.random.dirichlet(np.ones(len(send_id)), size=1)[0]
+recv_p  = np.random.dirichlet(np.ones(len(recv_id)), size=1)[0]
 types = [ ('B', -1.0), ('A', 1.0) ]
 
 def make_ent(d, exc, sym, typ, scn, tvm, tpr,
@@ -145,7 +147,8 @@ def fill_bid_ask(df, indices, starttime):
     # get all the trades for which we are generating bid/asks
     trades = df.iloc[indices]
     tstr = starttime.strftime("%H%M%S%F")
-    nc = multiprocessing.cpu_count() / 2
+    # seems to be the sweet spot on dual socket i7-920
+    nc = multiprocessing.cpu_count() / 4
     print "parallelizing to %d jobs" % nc
     newents = Parallel(verbose=True, n_jobs=nc)(delayed(make_bid_ask)(send_id,
              send_p, recv_id, recv_p, trades, types, tstr) for i in range(0, TARGET_RATE))
