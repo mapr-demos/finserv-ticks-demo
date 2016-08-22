@@ -141,7 +141,9 @@ Show me the depth of the trades topic:
 $ maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}'
 ```
 
-Running that command in a loop is a good way to observe the status of your workload. For example:
+## Just for run
+
+We can observe the status of our consumer like this:
 
 ```
 $ for i in `seq 1 100`; do maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}' | tr "\n" ","; done | tee -a logfile &
