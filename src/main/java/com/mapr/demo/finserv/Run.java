@@ -22,10 +22,16 @@ public class Run {
                 Producer.main(args);
                 break;
             case "consumer":
-                Consumer.main(args);
+                Consumer runme = new Consumer();
+                try {
+                    runme.main(args);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 break;
             default:
                 throw new IllegalArgumentException("Don't know how to do " + args[0]);
         }
+        System.exit(0);
     }
 }

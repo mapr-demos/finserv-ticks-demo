@@ -14,7 +14,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 
-public class Consumer {
+public class Consumer2 {
     private static final long POLL_INTERVAL = 5000;  // consumer poll every X milliseconds
     private static final long OFFSET_INTERVAL = 10000;  // record offset once every X messages
 
@@ -47,33 +47,33 @@ public class Consumer {
                     // Record an offset every once in a while
                     if (count % OFFSET_INTERVAL != 0) {
                         producer.send(rec,
-                                new Callback() {
-                                    public void onCompletion(RecordMetadata metadata, Exception e) {
-                                        if (metadata == null || e != null) {
-                                            // If there appears to have been an error, decrement our counter metric
-                                            count--;
-                                            queue.add(rec_backup);
-                                            e.printStackTrace();
-                                        }
+                            new Callback() {
+                                public void onCompletion(RecordMetadata metadata, Exception e) {
+                                    if (metadata == null || e != null) {
+                                        // If there appears to have been an error, decrement our counter metric
+                                        count--;
+                                        queue.add(rec_backup);
+                                        e.printStackTrace();
                                     }
                                 }
+                        }
                         );
                     } else {
                         String event_timestamp = new Tick(rec.value()).getDate();
                         producer.send(rec,
-                                new Callback() {
-                                    public void onCompletion(RecordMetadata metadata, Exception e) {
-                                        if (metadata == null || e != null) {
-                                            // If there appears to have been an error, decrement our counter metric
-                                            count--;
-                                            queue.add(rec_backup);
-                                            e.printStackTrace();
-                                        } else {
-                                            offset_producer.send(new ProducerRecord<String, String>(metadata.topic() + "-offset", event_timestamp, metadata.offset() + "," + metadata.partition()));
+                            new Callback() {
+                                public void onCompletion(RecordMetadata metadata, Exception e) {
+                                    if (metadata == null || e != null) {
+                                        // If there appears to have been an error, decrement our counter metric
+                                        count--;
+                                        queue.add(rec_backup);
+                                        e.printStackTrace();
+                                    } else {
+                                        offset_producer.send(new ProducerRecord<String, String>(metadata.topic() + "-offset", event_timestamp, metadata.offset() + "," + metadata.partition()));
 
-                                        }
                                     }
                                 }
+                            }
                         );
                     }
                     rec = queue.take();
