@@ -129,6 +129,27 @@ $ maprcli stream info -path /user/mapr/taq -json
 $ maprcli stream topic info -path /user/mapr/taq -topic trades -json
 ```
 
+Show me all the topics for my stream:
+
+```
+$ maprcli stream topic list -path /user/mapr/taq | awk '{print $4}' | sort | uniq -c
+```
+
+Show me the depth of the trades topic:
+
+```
+$ maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}'
+```
+
+Running that command in a loop is a good way to observe the status of your workload. For example:
+
+```
+$ for i in `seq 1 100`; do maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}' | tr "\n" ","; done | tee -a logfile &
+$ cat logfile | spark
+▁▁▁▂▃▃▄▅▆▆▇███████████████▇▇▇▇▇▆▆▆▆▆▆▅▅▅▅▅▄▄▄▄▄▄▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+```
+
+That sparkline is generated using the bash [spark utility](https://github.com/holman/spark).
 
 ## Cleaning Up
 
@@ -136,6 +157,30 @@ When you are done, you can delete the stream, and all associated topic using the
 ```
 $ maprcli stream delete -path /taq
 ```
+
+Don't forget to recreate the stream before running the producer again.
+
+# Performance Guidelines
+
+We suggest you use multiple partitions for the first stage of sending raw data to the taq:trades stream:topic, and use three consumer processes with two threads each for the middle stage of consuming that raw data and multiplexing it to receiver and sender topics.  In summary, create your topic like this:
+
+``` 
+$ maprcli stream create -path /user/mapr/taq -ttl 300
+$ maprcli stream topic create -path /user/mapr/taq -topic trades -partitions 3
+```
+
+Then run the consumers on three different cluster nodes, with 2 threads each, like this:
+
+```
+time java -cp `mapr classpath`:/mapr/tmclust1/user/mapr/resources:/mapr/tmclust1/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer2  /user/mapr/taq:trades 2
+```
+
+Then run the producer like this:
+
+```
+java -cp `mapr classpath`:/mapr/tmclust1/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run producer nyse/1minute /user/mapr/taq:trades;
+```
+
 
 # Testing Speeds for Different Configurations
 There are several unit tests that don't so much test anything as produce speed data
