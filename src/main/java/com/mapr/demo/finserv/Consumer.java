@@ -15,7 +15,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class Consumer {
-    private static final long POLL_INTERVAL = 5000;  // consumer poll every X milliseconds
+    private static final long POLL_INTERVAL = 15000;  // consumer waits X milliseconds until thinking there is no more data
     private static final long OFFSET_INTERVAL = 10000;  // record offset once every X messages
 
     private static int threadCount = 1;
@@ -85,7 +85,7 @@ public class Consumer {
     }
     long newcount=0;
     long oldcount=0;
-    public void main(String[] args) throws Exception {
+    public void main(String[] args) {
         //Thread.sleep(5000);  // give me a change to attach a remote debugger
 
         if (args.length < 2) {
@@ -112,7 +112,11 @@ public class Consumer {
         for (int i = 0; i < threadCount; i++) {
             BlockingQueue<ProducerRecord<String, byte[]>> q = new ArrayBlockingQueue<>(1000);
             queues.add(q);
-            pool.submit(new Sender(getProducer(), getOffsetProducer(), q));
+            try {
+                pool.submit(new Sender(getProducer(), getOffsetProducer(), q));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         configureConsumer();
@@ -123,50 +127,61 @@ public class Consumer {
         int i = 0;
         double t0 = System.nanoTime() * 1e-9;
         double t = t0;
-        while (true) {
-            i++;
-            //int qid = i % threadCount;      // Round-robin approach, not recommended because of batching.
-            int qid=0;
-            // Request unread messages from the topic.
-            ConsumerRecords<String, byte[]> records;
-            records = consumer.poll(POLL_INTERVAL);
-            if (records == null || records.count() == 0) {
-                if (count >= 10) {
-                    pool.shutdown();
-                    pool.awaitTermination(10, TimeUnit.SECONDS);
-                    break;
-                }
-                continue;
-            }
-
-            for (ConsumerRecord<String, byte[]> raw_record : records) {
-                String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
-                byte[] data = raw_record.value();
-                String sender_id = new String(data,71,4);
-                String send_topic = "/user/mapr/taq:sender_"+sender_id;
-                qid = send_topic.hashCode() % threadCount;
-                if (qid < 0) {
-                    qid += threadCount;
-                }
-                queues.get(qid).put(new ProducerRecord<>(send_topic, key, data));
-                for (int j=0; (79 + j*4) <= data.length; j++) {
-                    String receiver_id = new String(data, 75 + j*4, 4);
-                    String recv_topic = "/user/mapr/taq:receiver_"+receiver_id;
-                    qid = recv_topic.hashCode() % threadCount;
-                    if (qid < 0) {
-                        qid += threadCount;
+        try {
+            while (true) {
+                i++;
+                //int qid = i % threadCount;      // Round-robin approach, not recommended because of batching.
+                int qid = 0;
+                // Request unread messages from the topic.
+                ConsumerRecords<String, byte[]> records;
+                records = consumer.poll(POLL_INTERVAL);
+                if (records == null || records.count() == 0) {
+                    if (count >= 10) {
+                        for (int j = 0; j < threadCount; j++)
+                            queues.get(j).put(end);
+                        pool.shutdown();
+                        pool.awaitTermination(900, TimeUnit.SECONDS);
+                        break;
                     }
-                    queues.get(qid).put(new ProducerRecord<>(recv_topic, key, data));
+                    continue;
+                }
+
+                for (ConsumerRecord<String, byte[]> raw_record : records) {
+                    try {
+                        String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
+                        byte[] data = raw_record.value();
+                        String sender_id = new String(data, 71, 4);
+                        String send_topic = "/user/mapr/taq:sender_" + sender_id;
+                        qid = send_topic.hashCode() % threadCount;
+                        if (qid < 0) {
+                            qid += threadCount;
+                        }
+                        queues.get(qid).put(new ProducerRecord<>(send_topic, key, data));
+                        for (int j = 0; (79 + j * 4) <= data.length; j++) {
+                            String receiver_id = new String(data, 75 + j * 4, 4);
+                            String recv_topic = "/user/mapr/taq:receiver_" + receiver_id;
+                            qid = recv_topic.hashCode() % threadCount;
+                            if (qid < 0) {
+                                qid += threadCount;
+                            }
+                            queues.get(qid).put(new ProducerRecord<>(recv_topic, key, data));
+                        }
+                    } catch (StringIndexOutOfBoundsException e) {
+                        System.err.println("ERROR: Unexpected format for record: " + new String(raw_record.value(), 0, raw_record.value().length-1));
+                        e.printStackTrace();
+                    }
+                }
+                double dt = System.nanoTime() * 1e-9 - t;
+
+                if (dt > 1) {
+                    newcount = count - oldcount;
+                    System.out.printf("Total sent: %d, %.02f Kmsgs/sec\n", count, newcount / (System.nanoTime() * 1e-9 - t0) / 1000);
+                    t = System.nanoTime() * 1e-9;
+                    oldcount = newcount;
                 }
             }
-            double dt = System.nanoTime() * 1e-9 - t;
-
-            if (dt > 1) {
-                newcount = count-oldcount;
-                System.out.printf("Total sent: %d, %.02f Kmsgs/sec\n", count, newcount/(System.nanoTime() * 1e-9 - t0)/1000);
-                t = System.nanoTime() * 1e-9;
-                oldcount = newcount;
-            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
