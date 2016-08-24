@@ -59,7 +59,7 @@ public class BasicConsumer {
                 double elapsed_time = (current_time - start_time)/1e9;
                 if (records.count() == 0) {
                     if (printme) {
-                        System.out.println("===== No messages after " + pollTimeOut / 1000 + " =====");
+                        System.out.println("===== No messages after " + pollTimeOut / 1000 + "s =====");
                         System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
                                 records_processed,
                                 Math.round(elapsed_time),
@@ -101,7 +101,7 @@ public class BasicConsumer {
                                                 "\t\tpartition = %d\n" +
                                                 "\t\tkey = %s\n" +
                                                 "\t\toffset = %d\n",
-                                        record.value(),
+                                        new String(record.value()),
                                         (current_time - Long.valueOf(record.key())) / 1e9,
                                         record.topic(),
                                         record.partition(),
