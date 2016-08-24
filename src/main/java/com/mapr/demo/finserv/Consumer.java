@@ -70,7 +70,6 @@ public class Consumer {
                                             e.printStackTrace();
                                         } else {
                                             offset_producer.send(new ProducerRecord<String, String>(metadata.topic() + "-offset", event_timestamp, metadata.offset() + "," + metadata.partition()));
-
                                         }
                                     }
                                 }
@@ -182,7 +181,7 @@ public class Consumer {
 
     KafkaProducer<String, String> getOffsetProducer() throws IOException {
         Properties p = new Properties();
-        p.load(Resources.getResource("producer.props").openStream());
+        p.load(Resources.getResource("offset_producer.props").openStream());
 
         if (batchSize > 0) {
             p.setProperty("batch.size", String.valueOf(batchSize));
