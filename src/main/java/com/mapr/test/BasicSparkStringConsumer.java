@@ -20,7 +20,7 @@ public class BasicSparkStringConsumer {
             System.err.println("USAGE:\n" +
                     "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.test.BasicSparkStringConsumer target/nyse-taq-streaming-1.0-jar-with-dependencies.jar stream:topic\n" +
                     "EXAMPLE:\n" +
-                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.test.SparkStringConsumer /mapr/tmclust1/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /mapr/tmclust1/user/mapr/taq:mytopic");
+                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.test.SparkStringConsumer /mapr/tmclust1/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:mytopic");
         }
 
         SparkConf conf = new SparkConf()
