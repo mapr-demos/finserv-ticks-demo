@@ -2,7 +2,7 @@
 
 This project provides a processing engine for ingesting real time streams of NYSE trades and quotes into MapR-DB.
 
-This project handles the Daily TAQ (Trades and Quotes) dataset, described [here] (http://www.nyxdata.com/Data-Products/Daily-TAQ).
+This project handles the Daily Trades dataset described [here](http://www.nyxdata.com/Data-Products/Daily-TAQ). The schema for our data is detailed in Table 6, "Daily Trades File Data Fields", on page 26 of [Daily TAQ Client Specification (from December 1st, 2013)](http://www.nyxdata.com/doc/212759).
 
 ## Pre-requisites
 
