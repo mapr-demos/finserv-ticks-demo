@@ -35,8 +35,6 @@ public class BasicSparkStringConsumer {
         kafkaParams.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
         kafkaParams.put("value.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
 
-        //JavaPairInputDStream<String, String> directKafkaStream = KafkaUtils.createDirectStream(ssc,
-        //        String.class, String.class, StringDecoder.class, StringDecoder.class, kafkaParams, topics);
         JavaPairInputDStream<String, String> directKafkaStream = KafkaUtils.createDirectStream(ssc,
                 String.class, String.class, kafkaParams, topics);
 
