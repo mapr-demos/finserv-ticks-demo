@@ -22,6 +22,7 @@ import org.apache.spark.sql.RowFactory;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.hive.*;
 import org.apache.spark.sql.*;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaPairInputDStream;
@@ -46,6 +47,7 @@ public class SparkQuerier {
         JavaSparkContext sc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(sc);
         JavaStreamingContext ssc = new JavaStreamingContext(sc, new Duration(2000));
+        HiveContext hiveContext = new org.apache.spark.sql.hive.HiveContext(sc.sc());
 
         String topic = args[0];
         Set<String> topics = Collections.singleton(topic);
@@ -63,10 +65,10 @@ public class SparkQuerier {
 
             // Generate the schema for the dataframe that we will be constructing
             List<StructField> fields = new ArrayList<StructField>();
-            fields.add(0,DataTypes.createStructField("date", DataTypes.LongType, true));
+            fields.add(0,DataTypes.createStructField("date", DataTypes.StringType, true));
             fields.add(1,DataTypes.createStructField("symbol", DataTypes.StringType, true));
             fields.add(2,DataTypes.createStructField("price", DataTypes.DoubleType, true));
-            fields.add(3,DataTypes.createStructField("volume", DataTypes.LongType, true));
+            fields.add(3,DataTypes.createStructField("volume", DataTypes.DoubleType, true));
             StructType schema = DataTypes.createStructType(fields);
 
             if (rdd.count() > 0) {
@@ -88,17 +90,26 @@ public class SparkQuerier {
 
                 // Apply our user-defined schema to the RDD of parsed data
                 DataFrame tick_table = sqlContext.createDataFrame(rowRDD, schema);
+                // Create another dataframe to construct a Hive table and share with Zeppelin
+                DataFrame tick_table_for_zeppelin = hiveContext.createDataFrame(rowRDD, schema);
 
                 // Register the DataFrame as a table so we can query it with SQL
-                tick_table.registerTempTable("tick");
+                tick_table.registerTempTable("temptick");
+
+
+                tick_table_for_zeppelin.printSchema();
+                tick_table_for_zeppelin.show(5);
+                tick_table_for_zeppelin.saveAsTable("tick", SaveMode.Append);
+
 
                 try {
                     // Run a SQL query over the RDD that we registered as table.
-                    DataFrame sql_result = sqlContext.sql("SELECT symbol FROM tick");
+                    DataFrame sql_result = sqlContext.sql("SELECT symbol FROM temptick");
                     JavaRDD javardd = sql_result.javaRDD();
                     List<String> elements = javardd.map((Function<Row, String>) row ->
                             row.getString(0)).collect();
-                    elements.forEach(item -> System.out.println("Symbol: " + item));
+                    //elements.forEach(item -> System.out.println("Symbol: " + item));
+                    System.out.println("Loaded " + elements.size() + " rows from SQL query.");
                 } catch (Exception e) {
                     System.out.println("ERROR: " + e.getMessage());
                 }
