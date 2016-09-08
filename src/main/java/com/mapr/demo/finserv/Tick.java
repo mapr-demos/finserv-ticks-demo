@@ -6,6 +6,8 @@ import com.google.common.base.Charsets;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
 import java.util.List;
 
 /**
@@ -30,6 +32,16 @@ public class Tick implements Serializable {
     @JsonProperty("date")
     public String getDate() {
         return new String(data, 0, 9);
+    }
+
+    public long getTimeInMillis() {
+        // NYSE TAQ records do not reference year, month, day. So, we'll hard code, for now.
+        Calendar timestamp = new GregorianCalendar(2013,12,1);
+        timestamp.set(Calendar.HOUR, Integer.valueOf(new String(data, 0, 2)));
+        timestamp.set(Calendar.MINUTE, Integer.valueOf(new String(data, 2, 2)));
+        timestamp.set(Calendar.SECOND, Integer.valueOf(new String(data, 4, 2)));
+        timestamp.set(Calendar.MILLISECOND, Integer.valueOf(new String(data, 6, 3)));
+        return timestamp.getTimeInMillis();
     }
 
     @JsonProperty("exchange")
