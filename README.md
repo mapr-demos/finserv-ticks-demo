@@ -141,18 +141,6 @@ Show me the depth of the trades topic:
 $ maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}'
 ```
 
-### Just for fun:
-
-We can observe the status of our consumer like this:
-
-```
-$ for i in `seq 1 100`; do maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}' | tr "\n" ","; done | tee -a logfile &
-$ cat logfile | spark
-▁▁▁▂▃▃▄▅▆▆▇███████████████▇▇▇▇▇▆▆▆▆▆▆▅▅▅▅▅▄▄▄▄▄▄▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁
-```
-
-That sparkline is generated using the bash [spark utility](https://github.com/holman/spark).
-
 ## Cleaning Up
 
 When you are done, you can delete the stream, and all associated topic using the following command:
