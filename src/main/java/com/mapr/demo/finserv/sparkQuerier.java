@@ -109,6 +109,7 @@ public class sparkQuerier {
         ConsumerRecords<String, String> records = consumer.poll(200);
         System.out.println("got " + records.count() + " records");
 
+        System.out.println("--------------------------------");
         latestOffset = getLatestOffset(topic, 0);
         if (fromOffset == 0) {
             System.out.println("Latest offset = " + latestOffset);
