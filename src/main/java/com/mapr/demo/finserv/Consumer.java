@@ -59,7 +59,8 @@ public class Consumer {
                                 }
                         );
                     } else {
-                        String event_timestamp = new Tick(rec.value()).getDate();
+//                        String event_timestamp = new Tick(rec.value()).getDate();
+                        String event_timestamp = Long.toString(System.currentTimeMillis());
                         producer.send(rec,
                                 new Callback() {
                                     public void onCompletion(RecordMetadata metadata, Exception e) {
@@ -69,7 +70,7 @@ public class Consumer {
                                             queue.add(rec_backup);
                                             e.printStackTrace();
                                         } else {
-                                            offset_producer.send(new ProducerRecord<String, String>(metadata.topic() + "-offset", event_timestamp, metadata.offset() + "," + metadata.partition()));
+                                            offset_producer.send(new ProducerRecord<String, String>(metadata.topic() + "-offset", event_timestamp, Long.toString(metadata.offset())));
                                         }
                                     }
                                 }
