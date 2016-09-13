@@ -8,9 +8,9 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 public class BasicConsumer {
 
@@ -25,7 +25,7 @@ public class BasicConsumer {
             System.err.println("USAGE:\n" +
                     "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.BasicConsumer stream:topic1 [stream:topic_n] [verbose]\n" +
                     "EXAMPLE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.BasicConsumerRelay /user/mapr/taq:test01 /user/mapr/taq:test02 /user/mapr/taq:test03 verbose");
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.BasicConsumer /user/mapr/taq:test01 /user/mapr/taq:test02 /user/mapr/taq:test03 verbose");
         }
 
         List<String> topics = new ArrayList<String>();
@@ -66,8 +66,6 @@ public class BasicConsumer {
                                 latency_total/records_processed,
                                 Math.round(records_processed / elapsed_time / 1000));
                         printme = false;
-                        System.out.println("Exiting...");
-                        System.exit(0);
                     }
                 }
                 if (records.count() > 0) {
@@ -86,7 +84,7 @@ public class BasicConsumer {
                         if ((Math.floor(current_time - start_time)/1e9) > last_update)
                         {
                             last_update ++;
-
+                            System.out.println("----------------------------------");
                             System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
                                     records_processed,
                                     Math.round(elapsed_time),
@@ -95,18 +93,22 @@ public class BasicConsumer {
                         }
                         if (record.key() != null) {
                             if (VERBOSE) {
-                                System.out.printf("\tconsumed: '%s'\n" +
-                                                "\t\tdelay = %.2fs\n" +
-                                                "\t\ttopic = %s\n" +
-                                                "\t\tpartition = %d\n" +
-                                                "\t\tkey = %s\n" +
-                                                "\t\toffset = %d\n",
-                                        new String(record.value()),
-                                        (current_time - Long.valueOf(record.key())) / 1e9,
-                                        record.topic(),
-                                        record.partition(),
-                                        record.key(),
-                                        record.offset());
+                                Calendar cal = Calendar.getInstance();
+                                cal.setTimeInMillis(Long.parseLong(new String(record.value())));
+                                DateFormat formatter = new SimpleDateFormat("HH:mm:ss:SSS");
+                                String dateFormatted = formatter.format(cal.getTime());
+
+                                System.out.printf("\tOffset %s was recorded at time %s.\n", new String(record.value()), dateFormatted);
+//                                System.out.printf("\trecord.value = '%s'\n" +
+//                                                "\t\trecord.topic = %s\n" +
+//                                                "\t\trecord.partition = %d\n" +
+//                                                "\t\trecord.key = %s\n" +
+//                                                "\t\trecord.offset = %d\n",
+//                                        new String(record.value()),
+//                                        record.topic(),
+//                                        record.partition(),
+//                                        record.key(),
+//                                        record.offset());
                                 System.out.println("\t\tTotal records consumed : " + records_processed);
                                 System.out.println("\t\tElapsed time : " + elapsed_time);
                                 System.out.println("\t\tWall clock : " + System.nanoTime());
