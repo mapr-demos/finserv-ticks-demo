@@ -2,19 +2,26 @@ package com.mapr.demo.finserv;
 
 /******************************************************************************
  * PURPOSE:
- * This class is intended to allow one to query the NYSE TAQ data
- * in a Kafka stream, and ask the question, "Show me all the trades involving
- * participant A in the past X minutes", where "A" is the ID for a seller or receiver.
+ *   This spark application consumes records from Kafka topics and continuously
+ *   persists each message in a Hive table, for the purposes of analysis and
+ *   visualization in Zeppelin.
  *
  * EXAMPLE USAGE:
- * /opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkQuerier /mapr/tmclust1/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1142
+ *   /opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive /mapr/tmclust1/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1142
+ *
+ * EXAMPLE QUERIES FOR APACHE ZEPPELIN:
+ * Here are a few sample queries for interactively analyzing NYSE TAQ data. Log into Zeppelin (default port 7000) and paste these commands as paragraphs in the notebook.
+ *   %sql SELECT sender, symbol, count(1) num_trades FROM streaming_ticks where symbol ="AA" group by sender, symbol order by sender
+ *   %sql SELECT price, volume, count(1) value FROM streaming_ticks where sender = "1361" group by price, volume, sender order by price
+ *   %sql select count(*) from streaming_ticks
  *
  * REFERENCES:
  *   Spark Streaming API - http://spark.apache.org/docs/1.6.0/streaming-kafka-integration.html
  *   Spark Streaming Guide - http://spark.apache.org/docs/1.6.0/streaming-programming-guide.html
  *
  * AUTHOR:
- * Ian Downard, idownard@mapr.com
+ *   Ian Downard, idownard@mapr.com
+ *
  *****************************************************************************/
 
 import org.apache.spark.api.java.function.Function;
@@ -37,7 +44,7 @@ import scala.Tuple2;
 
 import java.util.*;
 
-public class SparkQuerier {
+public class SparkStreamingToHive {
 
     private static final int NUM_THREADS = 1;
 
@@ -51,9 +58,9 @@ public class SparkQuerier {
         if (args.length < 1) {
             System.err.println("ERROR: You must specify the stream:topic.");
             System.err.println("USAGE:\n" +
-                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkQuerier target/nyse-taq-streaming-1.0-jar-with-dependencies.jar stream:topic\n" +
+                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive target/nyse-taq-streaming-1.0-jar-with-dependencies.jar stream:topic\n" +
                     "EXAMPLE:\n" +
-                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkQuerier /mapr/tmclust1/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1142");
+                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1142");
         }
 
         SparkConf conf = new SparkConf()
