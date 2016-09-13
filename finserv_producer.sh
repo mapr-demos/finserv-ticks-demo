@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-export DATA=/home/mapr/test1/finserv-ticks-demo/data
+export DATA=/home/mapr/nyse/data/
 export STREAM=/user/mapr/taq
 export TOPIC=trades
-ls -1 $DATA | while read line; do java -cp `mapr classpath`:/home/mapr/nyse/nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run producer $DATA/$line $STREAM:$TOPIC; done
+export CLASSPATH=`mapr classpath`:/mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar
+
+while true; java -cp $CLASSPATH com.mapr.demo.finserv.Run producer $DATA/$line $STREAM:$TOPIC; done
