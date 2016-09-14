@@ -40,7 +40,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Scanner;
 
-public class sparkQuerier {
+public class SparkStreamingConsole {
 
     private static KafkaConsumer consumer;
 
@@ -80,7 +80,7 @@ public class sparkQuerier {
         if (args.length < 1) {
             System.err.println("ERROR: You must specify the stream:topic.");
             System.err.println("USAGE:\n" +
-                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.sparkQuerier /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1361 [fromOffset]\n");
+                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingConsole /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1361 [fromOffset]\n");
         }
 
         long latestOffset;
