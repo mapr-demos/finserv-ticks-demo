@@ -59,12 +59,12 @@ public class BasicConsumer {
                 double elapsed_time = (current_time - start_time)/1e9;
                 if (records.count() == 0) {
                     if (printme) {
-                        System.out.println("===== No messages after " + pollTimeOut / 1000 + "s =====");
-                        System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
-                                records_processed,
-                                Math.round(elapsed_time),
-                                latency_total/records_processed,
-                                Math.round(records_processed / elapsed_time / 1000));
+//                        System.out.println("===== No messages after " + pollTimeOut / 1000 + "s =====");
+//                        System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
+//                                records_processed,
+//                                Math.round(elapsed_time),
+//                                latency_total/records_processed,
+//                                Math.round(records_processed / elapsed_time / 1000));
                         printme = false;
                     }
                 }
@@ -84,21 +84,22 @@ public class BasicConsumer {
                         if ((Math.floor(current_time - start_time)/1e9) > last_update)
                         {
                             last_update ++;
-                            System.out.println("----------------------------------");
-                            System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
-                                    records_processed,
-                                    Math.round(elapsed_time),
-                                    latency_total/records_processed,
-                                    Math.round(records_processed / elapsed_time / 1000));
+//                            System.out.println("----------------------------------");
+//                            System.out.printf("Total msgs consumed = %d over %ds. Avg msg latency = %.0fs. Avg ingest rate = %dKmsgs/s\n",
+//                                    records_processed,
+//                                    Math.round(elapsed_time),
+//                                    latency_total/records_processed,
+//                                    Math.round(records_processed / elapsed_time / 1000));
                         }
                         if (record.key() != null) {
                             if (VERBOSE) {
-                                Calendar cal = Calendar.getInstance();
+
+                                Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
                                 cal.setTimeInMillis(Long.parseLong(new String(record.value())));
-                                DateFormat formatter = new SimpleDateFormat("HH:mm:ss:SSS");
+                                DateFormat formatter = new SimpleDateFormat("HH:mm:ss:ms MM/dd/yyyy");
                                 String dateFormatted = formatter.format(cal.getTime());
 
-                                System.out.printf("\tOffset %s was recorded at time %s.\n", new String(record.value()), dateFormatted);
+                                System.out.printf("Offset %s corresponds to trades recorded at time %s.\n", new String(record.value()), dateFormatted);
 //                                System.out.printf("\trecord.value = '%s'\n" +
 //                                                "\t\trecord.topic = %s\n" +
 //                                                "\t\trecord.partition = %d\n" +
@@ -109,9 +110,9 @@ public class BasicConsumer {
 //                                        record.partition(),
 //                                        record.key(),
 //                                        record.offset());
-                                System.out.println("\t\tTotal records consumed : " + records_processed);
-                                System.out.println("\t\tElapsed time : " + elapsed_time);
-                                System.out.println("\t\tWall clock : " + System.nanoTime());
+//                                System.out.println("\t\tTotal records consumed : " + records_processed);
+//                                System.out.println("\t\tElapsed time : " + elapsed_time);
+//                                System.out.println("\t\tWall clock : " + System.nanoTime());
 
                             }
                         }

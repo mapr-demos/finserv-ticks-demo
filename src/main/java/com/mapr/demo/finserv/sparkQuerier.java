@@ -34,6 +34,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Scanner;
@@ -83,71 +85,79 @@ public class sparkQuerier {
 
         long latestOffset;
         long fromOffset=0;
-        Scanner user_input = new Scanner( System.in );
-        SparkConf conf = new SparkConf()
-                .setAppName("TAQ Spark Streaming")
-                .setMaster("local[" + NUM_THREADS + "]");
-        JavaSparkContext sc = new JavaSparkContext(conf);
-        JavaStreamingContext ssc = new JavaStreamingContext(sc, new Duration(BATCH_INTERVAL));
-        HiveContext hiveContext = new org.apache.spark.sql.hive.HiveContext(sc.sc());
+            Scanner user_input = new Scanner(System.in);
+            SparkConf conf = new SparkConf()
+                    .setAppName("TAQ Spark Streaming")
+                    .setMaster("local[" + NUM_THREADS + "]")
+                    .set("spark.driver.allowMultipleContexts", "true");
+            JavaSparkContext sc = new JavaSparkContext(conf);
+            JavaStreamingContext ssc = new JavaStreamingContext(sc, new Duration(BATCH_INTERVAL));
+            HiveContext hiveContext = new org.apache.spark.sql.hive.HiveContext(sc.sc());
 
-        String topic = args[0];
+            String topic = args[0];
 
-        if (args.length == 2)
-            fromOffset = Long.parseLong(args[1]);
+            if (args.length == 2)
+                fromOffset = Long.parseLong(args[1]);
 
-        configureConsumer();
-        System.out.println("subscribing to topic: " + topic);
+            configureConsumer();
+            System.out.println("subscribing to topic: " + topic);
 
-        consumer.subscribe(Arrays.asList(topic));
+            consumer.subscribe(Arrays.asList(topic));
 
-        // read records with a short timeout. If we time out, we don't really care.
-        // looks like because of KAFKA-2359
-        // we have to do a poll() before any partitions are assigned?
-        // else we get an error that we are doing a seek() on an unsubscribed partition
-        // the records from poll() also have to be evaluated, the below println seems to do it
-        ConsumerRecords<String, String> records = consumer.poll(200);
-        System.out.println("got " + records.count() + " records");
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(200);
+            System.out.println(records.count() + " records available.");
 
-        System.out.println("--------------------------------");
-        latestOffset = getLatestOffset(topic, 0);
-        if (fromOffset == 0) {
-            System.out.println("Latest offset = " + latestOffset);
-            System.out.print("Enter desired fromOffset");
-            fromOffset = Long.parseLong(user_input.next());
-        }
-        System.out.println("latest offset: " + latestOffset + " desired fromOffset: " + fromOffset);
+            latestOffset = getLatestOffset(topic, 0);
+            Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+            DateFormat formatter = new SimpleDateFormat("HH:mm:ss:ms MM/dd/yyyy");
+            System.out.println("Latest offset = " + latestOffset + " at time " + formatter.format(cal.getTime()));
+            System.out.println("Press ENTER to see refresh.");
+            if (fromOffset == 0) {
+                System.out.print("Enter desired fromOffset: ");
+                String input = user_input.nextLine();
+                if (input.length() == 0)
+                    continue;
+                fromOffset = Long.parseLong(input);
+            }
 
-        // see how far we need to look back in the stream
-        // this is used to specify the range of offsets we want in the RDD,
-        // which will be fetched from Kafka/Streams
-        OffsetRange[] offsetRanges = {
-                OffsetRange.create(topic, 0, fromOffset, latestOffset)
-        };
+            System.out.println("latest offset: " + latestOffset + " desired fromOffset: " + fromOffset);
 
-        Map<String, String> kafkaParams = new HashMap<>();
-        kafkaParams.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
-        kafkaParams.put("value.deserializer","org.apache.kafka.common.serialization.ByteArrayDeserializer");
+            // see how far we need to look back in the stream
+            // this is used to specify the range of offsets we want in the RDD,
+            // which will be fetched from Kafka/Streams
+            OffsetRange[] offsetRanges = {
+                    OffsetRange.create(topic, 0, fromOffset, latestOffset)
+            };
 
-        JavaRDD<String> rdd = KafkaUtils.createRDD(
-                sc,
-                String.class,
-                byte[].class,
-                kafkaParams,
-                offsetRanges
-        ).map(
-                new Function<Tuple2<String, byte[]>, String>() {
-                    @Override
-                    public String call(scala.Tuple2<String, byte[]> record) throws Exception {
-                        byte[] data = record._2;
-                        Tick t = new Tick(data);
-                        System.out.printf("%s, %s, %.0f, %.2f\n", t.getDate(), t.getSymbolRoot(), t.getTradeVolume(), t.getTradePrice());
-                        return new String(record._2());
+            Map<String, String> kafkaParams = new HashMap<>();
+            kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+            kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+
+            JavaRDD<String> rdd = KafkaUtils.createRDD(
+                    sc,
+                    String.class,
+                    byte[].class,
+                    kafkaParams,
+                    offsetRanges
+            ).map(
+                    new Function<Tuple2<String, byte[]>, String>() {
+                        @Override
+                        public String call(scala.Tuple2<String, byte[]> record) throws Exception {
+                            byte[] data = record._2;
+                            Tick t = new Tick(data);
+                            StringBuilder receivers = new StringBuilder();
+                            for (String id : t.getReceivers())
+                                receivers.append(id + " ");
+                            System.out.printf("%s, %s, %s, %s, %.0f, %.2f\n", t.getDate(), t.getSender(), receivers, t.getSymbolRoot(), t.getTradeVolume(), t.getTradePrice());
+                            return new String(record._2());
+                        }
                     }
-                }
-        );
+            );
 
-        System.out.println("--------------------------------\nrdd.count = " + rdd.count());
+            System.out.println("--------------------------------\nrdd.count = " + rdd.count());
+            fromOffset = 0;
+        }
 
     }
 

@@ -60,7 +60,8 @@ public class Consumer {
                         );
                     } else {
 //                        String event_timestamp = new Tick(rec.value()).getDate();
-                        String event_timestamp = Long.toString(System.currentTimeMillis());
+                        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+                        String event_timestamp = Long.toString(cal.getTimeInMillis());
                         producer.send(rec,
                                 new Callback() {
                                     public void onCompletion(RecordMetadata metadata, Exception e) {
