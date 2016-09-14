@@ -59,7 +59,9 @@ public class Consumer {
                                 }
                         );
                     } else {
-                        String event_timestamp = new Tick(rec.value()).getDate();
+//                        String event_timestamp = new Tick(rec.value()).getDate();
+                        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+                        String event_timestamp = Long.toString(cal.getTimeInMillis());
                         producer.send(rec,
                                 new Callback() {
                                     public void onCompletion(RecordMetadata metadata, Exception e) {
@@ -69,8 +71,7 @@ public class Consumer {
                                             queue.add(rec_backup);
                                             e.printStackTrace();
                                         } else {
-                                            offset_producer.send(new ProducerRecord<String, String>(metadata.topic() + "-offset", event_timestamp, metadata.offset() + "," + metadata.partition()));
-
+                                            offset_producer.send(new ProducerRecord<String, String>(metadata.topic() + "-offset", event_timestamp, Long.toString(metadata.offset())));
                                         }
                                     }
                                 }
@@ -91,9 +92,9 @@ public class Consumer {
         if (args.length < 2) {
             System.err.println("ERROR: You must specify a stream:topic to consume data from.");
             System.err.println("USAGE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer2 [stream:topic] [NUM_THREADS] [verbose]\n" +
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [NUM_THREADS] [verbose]\n" +
                     "Example:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer2 /usr/mapr/taq:trades 2 verbose");
+                    "\tjava -cp `mapr classpath`:/mapr/ian.cluseter.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar:/mapr/ian.cluster.com/user/mapr/resources/ com.mapr.demo.finserv.Run consumer /usr/mapr/taq:trades 2 verbose");
 
         }
 
@@ -197,7 +198,7 @@ public class Consumer {
 
     KafkaProducer<String, String> getOffsetProducer() throws IOException {
         Properties p = new Properties();
-        p.load(Resources.getResource("producer.props").openStream());
+        p.load(Resources.getResource("offset_producer.props").openStream());
 
         if (batchSize > 0) {
             p.setProperty("batch.size", String.valueOf(batchSize));

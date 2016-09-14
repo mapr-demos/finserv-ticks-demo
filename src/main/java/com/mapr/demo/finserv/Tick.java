@@ -6,6 +6,8 @@ import com.google.common.base.Charsets;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
 import java.util.List;
 
 /**
@@ -28,69 +30,79 @@ public class Tick implements Serializable {
     public byte[] getData() { return this.data; }
 
     @JsonProperty("date")
-    String getDate() {
+    public String getDate() {
         return new String(data, 0, 9);
     }
 
+    public long getTimeInMillis() {
+        // NYSE TAQ records do not reference year, month, day. So, we'll hard code, for now.
+        Calendar timestamp = new GregorianCalendar(2013,12,1);
+        timestamp.set(Calendar.HOUR, Integer.valueOf(new String(data, 0, 2)));
+        timestamp.set(Calendar.MINUTE, Integer.valueOf(new String(data, 2, 2)));
+        timestamp.set(Calendar.SECOND, Integer.valueOf(new String(data, 4, 2)));
+        timestamp.set(Calendar.MILLISECOND, Integer.valueOf(new String(data, 6, 3)));
+        return timestamp.getTimeInMillis();
+    }
+
     @JsonProperty("exchange")
-    String getExchange() {
+    public String getExchange() {
         return new String(data, 9, 1);
     }
 
     @JsonProperty("symbol-root")
-    String getSymbolRoot() {
+    public String getSymbolRoot() {
         return trim(10, 6);
     }
 
     @JsonProperty("symbol-suffix")
-    String getSymbolSuffix() {
+    public String getSymbolSuffix() {
         return trim(16, 10);
     }
 
     @JsonProperty("sale-condition")
-    String getSaleCondition() {
+    public String getSaleCondition() {
         return trim(26, 4);
     }
 
     @JsonProperty("trade-volume")
-    double getTradeVolume() {
+    public double getTradeVolume() {
         return digitsAsInt(30, 9);
     }
 
     @JsonProperty("trade-price")
-    double getTradePrice() {
+    public double getTradePrice() {
         return digitsAsDouble(39, 11, 4);
     }
 
     //String getTradePrice() {return new String(data, 39, 46) + "." + record.substring(data, 46, getTradeStopStockIndicator() {return new String(data, 50, 51); }
 
     @JsonProperty("trade-correction-indicator")
-    String getTradeCorrectionIndicator() {
+    public String getTradeCorrectionIndicator() {
         return new String(data, 51, 2);
     }
 
     @JsonProperty("trade-sequence-number")
-    String getTradeSequenceNumber() {
+    public String getTradeSequenceNumber() {
         return new String(data, 53, 16);
     }
 
     @JsonProperty("trade-source")
-    String getTradeSource() {
+    public String getTradeSource() {
         return new String(data, 69, 1);
     }
 
     @JsonProperty("trade-reporting-facility")
-    String getTradeReportingFacility() {
+    public String getTradeReportingFacility() {
         return new String(data, 70, 1);
     }
 
     @JsonProperty("sender")
-    String getSender() {
+    public String getSender() {
         return new String(data,71,4);
     }
 
     @JsonProperty("receiver-list")
-    List<String> getReceivers() {
+    public List<String> getReceivers() {
         List<String> receivers = new ArrayList<>();
         for (int i=0; data.length >= 79 + i*4; i++) {
             receivers.add(new String(data, 75 + i*4, 4));
@@ -118,10 +130,14 @@ public class Tick implements Serializable {
 
     private String trim(int start, int length) {
         int i = start;
+        int j = start+length;
         while (i < start + length && data[i] == ' ') {
             i++;
         }
-        return new String(data, i, start + length - i);
+        while ((j-i) > 0 && data[j] == ' ') {
+            j--;
+        }
+        return new String(data, i, j - i + 1);
     }
 
     public void writeObject(java.io.ObjectOutputStream out) throws IOException {

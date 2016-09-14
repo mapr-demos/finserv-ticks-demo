@@ -2,7 +2,7 @@
 
 This project provides a processing engine for ingesting real time streams of NYSE trades and quotes into MapR-DB.
 
-This project handles the Daily TAQ (Trades and Quotes) dataset, described [here] (http://www.nyxdata.com/Data-Products/Daily-TAQ).
+This project handles the Daily Trades dataset described [here](http://www.nyxdata.com/Data-Products/Daily-TAQ). The schema for our data is detailed in Table 6, "Daily Trades File Data Fields", on page 26 of [Daily TAQ Client Specification (from December 1st, 2013)](http://www.nyxdata.com/doc/212759).
 
 ## Pre-requisites
 
@@ -63,8 +63,13 @@ The JUnit tests can take a few minutes to complete. To build without them, run `
 
 The project create a jar with all external dependencies ( `./target/nyse-taq-streaming-1.0-jar-with-dependencies.jar` )
 
+### Step 5. Start the Spark to Hive Consumer
 
-### Step 5: Run the Producer
+```
+$ /opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:trades
+```
+
+### Step 6: Run the Producer
 
 You can install the [MapR Client](http://maprdocs.mapr.com/51/index.html#AdvancedInstallation/SettingUptheClient-client_26982445-d3e146.html) and run the application locally,
 or copy the jar file on your cluster (any node).
@@ -102,7 +107,7 @@ Sent msg number 999000
 The command-line argument `data/taqtrade20131218` refers to the source file containing the TAQ dataset to be published into the `taq:trades` MapR stream.
 
 
-### Step 6: Start the Consumer
+### Step 7: Start the Consumer
 
 In another window you can run the consumer using the following command:
 
@@ -119,6 +124,11 @@ Sent msg number 998000
 Sent msg number 999000
 ```
 
+### Step 8: Interactive Data Analysis (optional)
+
+You can use Apache Zeppelin for interactive data analysis. We've included a sample Zeppelin notebook which includes some sample SQL queries and charts to get you started. The notebook is in zeppelin/notebook/2BW3AEAGG/note.json. Refer to [this blog](http://fedulov.website/2015/10/16/export-apache-zeppelin-notebooks/) for instructions on how to import a notebook into Zeppelin.
+
+Our Zeppelin server is at [http://iannodec.westus.cloudapp.azure.com:7000](http://iannodec.westus.cloudapp.azure.com:7000).
 
 ### Monitoring your topics 
 
@@ -128,6 +138,15 @@ You can use the `maprcli` tool to get some information about the topic, for exam
 $ maprcli stream info -path /user/mapr/taq -json
 $ maprcli stream topic info -path /user/mapr/taq -topic trades -json
 ```
+
+If the MapR-FS filesystem runs out of free space, the kafka producers will fail, so keep an eye on disk space like this:
+
+```
+$ maprcli disk list -host iannodea
+```
+
+If the disk space fills up, it's easiest just to remove the stream then create it again.
+
 
 Show me all the topics for my stream:
 
@@ -141,26 +160,21 @@ Show me the depth of the trades topic:
 $ maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}'
 ```
 
-### Just for fun:
-
-We can observe the status of our consumer like this:
-
-```
-$ for i in `seq 1 100`; do maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk '{print $12-$2}' | tr "\n" ","; done | tee -a logfile &
-$ cat logfile | spark
-▁▁▁▂▃▃▄▅▆▆▇███████████████▇▇▇▇▇▆▆▆▆▆▆▅▅▅▅▅▄▄▄▄▄▄▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁
-```
-
-That sparkline is generated using the bash [spark utility](https://github.com/holman/spark).
-
 ## Cleaning Up
 
 When you are done, you can delete the stream, and all associated topic using the following command:
+
 ```
 $ maprcli stream delete -path /taq
 ```
 
 Don't forget to recreate the stream before running the producer again.
+
+Remove the Hive table:
+
+```
+$ rm -rf /mapr/ian.cluster.com/user/hive/warehouse/streaming_ticks/
+```
 
 # Performance Guidelines
 
