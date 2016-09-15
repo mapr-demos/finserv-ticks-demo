@@ -1,18 +1,15 @@
 package com.mapr.test;
 
-import java.io.*;
-
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
+import java.io.IOException;
 import java.util.*;
 
-public class ConsumeWithOffsets {
+public class TopicPrinter {
 
     public static KafkaConsumer consumer;
     static long records_processed = 0L;
@@ -23,9 +20,9 @@ public class ConsumeWithOffsets {
         if (args.length < 1) {
             System.err.println("ERROR: You must specify the stream:topic.");
             System.err.println("USAGE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.ConsumeWithOffsets stream:topic1 [stream:topic_n] [verbose]\n" +
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.TopicPrinter stream:topic1 [stream:topic_n] [verbose]\n" +
                     "EXAMPLE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.ConsumeWithOffsets /user/mapr/taq:test01 /user/mapr/taq:test02 /user/mapr/taq:test03 verbose");
+                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.test.TopicPrinter /user/mapr/taq:test01 /user/mapr/taq:test02 /user/mapr/taq:test03 verbose");
         }
 
         List<String> topics = new ArrayList<String>();
@@ -51,6 +48,7 @@ public class ConsumeWithOffsets {
         long start_time = 0;
         long last_update = 0;
         double latency_total = 0;
+        System.out.println("Waiting for messages...");
         try {
             while (true) {
                 // Request unread messages from the topic.
@@ -59,6 +57,11 @@ public class ConsumeWithOffsets {
                 double elapsed_time = (current_time - start_time)/1e9;
                 if (records.count() == 0) {
                     if (printme) {
+                        System.out.println("===== No messages after " + pollTimeOut / 1000 + "s =====");
+                        System.out.printf("Total msgs consumed = %d over %ds. Avg ingest rate = %dKmsgs/s\n",
+                                records_processed,
+                                Math.round(elapsed_time),
+                                Math.round(records_processed / elapsed_time / 1000));
                         printme = false;
                     }
                 }
@@ -78,25 +81,28 @@ public class ConsumeWithOffsets {
                         if ((Math.floor(current_time - start_time)/1e9) > last_update)
                         {
                             last_update ++;
+                            System.out.println("----------------------------------");
+                            System.out.printf("Total msgs consumed = %d over %ds. Avg ingest rate = %dKmsgs/s\n",
+                                    records_processed,
+                                    Math.round(elapsed_time),
+                                    Math.round(records_processed / elapsed_time / 1000));
                         }
                         if (record.key() != null) {
                             if (VERBOSE) {
-
-                                Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
-                                cal.setTimeInMillis(Long.parseLong(new String(record.key())));
-                                DateFormat formatter = new SimpleDateFormat("HH:mm:ss:ms MM/dd/yyyy");
-                                String dateFormatted = formatter.format(cal.getTime());
-                                System.out.printf("Offset %s corresponds to trades recorded at time %s.\n", new String(record.value()), dateFormatted);
-                                System.out.printf("\trecord.key = %s\n" +
-                                                "\trecord.value = '%s'\n" +
+                                System.out.printf("\trecord.value = '%s'\n" +
                                                 "\trecord.topic = %s\n" +
                                                 "\trecord.partition = %d\n" +
+                                                "\trecord.key = %s\n" +
                                                 "\trecord.offset = %d\n",
                                         new String(record.value()),
                                         record.topic(),
                                         record.partition(),
                                         record.key(),
                                         record.offset());
+                                System.out.println("\t\tTotal records consumed = " + records_processed);
+                                System.out.println("\t\tElapsed time = " + elapsed_time);
+                                System.out.println("\t\tSystem.nanoTime = " + System.nanoTime());
+
                             }
                         }
 
