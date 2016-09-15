@@ -133,6 +133,7 @@ public class Consumer {
             records = consumer.poll(POLL_INTERVAL);
             if (records == null || records.count() == 0) {
                 if (count >= 10) {
+                    System.out.println("The " + topic + "topic is empty. Exiting...");
                     pool.shutdown();
                     pool.awaitTermination(10, TimeUnit.SECONDS);
                     break;
@@ -140,25 +141,30 @@ public class Consumer {
                 continue;
             }
 
-            for (ConsumerRecord<String, byte[]> raw_record : records) {
-                String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
-                byte[] data = raw_record.value();
-                String sender_id = new String(data,71,4);
-                String send_topic = "/user/mapr/taq:sender_"+sender_id;
-                qid = send_topic.hashCode() % threadCount;
-                if (qid < 0) {
-                    qid += threadCount;
-                }
-                queues.get(qid).put(new ProducerRecord<>(send_topic, key, data));
-                for (int j=0; (79 + j*4) <= data.length; j++) {
-                    String receiver_id = new String(data, 75 + j*4, 4);
-                    String recv_topic = "/user/mapr/taq:receiver_"+receiver_id;
-                    qid = recv_topic.hashCode() % threadCount;
+            try {
+                for (ConsumerRecord<String, byte[]> raw_record : records) {
+                    String key = Long.toString(Calendar.getInstance(TimeZone.getTimeZone("GMT")).getTimeInMillis());
+                    //String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
+                    byte[] data = raw_record.value();
+                    String sender_id = new String(data, 71, 4);
+                    String send_topic = "/user/mapr/taq:sender_" + sender_id;
+                    qid = send_topic.hashCode() % threadCount;
                     if (qid < 0) {
                         qid += threadCount;
                     }
-                    queues.get(qid).put(new ProducerRecord<>(recv_topic, key, data));
+                    queues.get(qid).put(new ProducerRecord<>(send_topic, key, data));
+                    for (int j = 0; (79 + j * 4) <= data.length; j++) {
+                        String receiver_id = new String(data, 75 + j * 4, 4);
+                        String recv_topic = "/user/mapr/taq:receiver_" + receiver_id;
+                        qid = recv_topic.hashCode() % threadCount;
+                        if (qid < 0) {
+                            qid += threadCount;
+                        }
+                        queues.get(qid).put(new ProducerRecord<>(recv_topic, key, data));
+                    }
                 }
+            } catch (StringIndexOutOfBoundsException e) {
+                System.err.println("Invalid record");
             }
             double dt = System.nanoTime() * 1e-9 - t;
 
