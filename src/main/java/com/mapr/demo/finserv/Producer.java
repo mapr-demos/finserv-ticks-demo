@@ -14,8 +14,10 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.Properties;
+import java.util.TimeZone;
 
 public class Producer {
 
@@ -65,6 +67,7 @@ public class Producer {
                 while (line != null) {
                     long current_time = System.nanoTime();
                     String key = Long.toString(current_time);
+                    //String key = Long.toString(Calendar.getInstance(TimeZone.getTimeZone("GMT")).getTimeInMillis());
                     ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, line.getBytes(Charsets.ISO_8859_1));
 
                     // Send the record to the producer client library.
