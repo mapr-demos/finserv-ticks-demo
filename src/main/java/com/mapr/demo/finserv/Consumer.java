@@ -15,7 +15,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class Consumer {
-    private static final long POLL_INTERVAL = 5000;  // consumer poll every X milliseconds
+    private static final long POLL_INTERVAL = 4000;  // consumer poll every X milliseconds
     private static final long OFFSET_INTERVAL = 10000;  // record offset once every X messages
 
     private static int threadCount = 1;
