@@ -15,7 +15,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class Consumer {
-    private static final long POLL_INTERVAL = 15000;  // consumer waits X milliseconds until thinking there is no more data
+    private static final long POLL_INTERVAL = 4000;  // consumer poll every X milliseconds
     private static final long OFFSET_INTERVAL = 10000;  // record offset once every X messages
 
     private static int threadCount = 1;
@@ -86,13 +86,13 @@ public class Consumer {
     }
     long newcount=0;
     long oldcount=0;
-    public void main(String[] args) {
+    public void main(String[] args) throws Exception {
         //Thread.sleep(5000);  // give me a change to attach a remote debugger
 
         if (args.length < 2) {
             System.err.println("ERROR: You must specify a stream:topic to consume data from.");
             System.err.println("USAGE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [NUM_THREADS] [verbose]\n" +
+                    "\tjava -cp `mapr classpath`:/mapr/ian.cluseter.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [NUM_THREADS] [verbose]\n" +
                     "Example:\n" +
                     "\tjava -cp `mapr classpath`:/mapr/ian.cluseter.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar:/mapr/ian.cluster.com/user/mapr/resources/ com.mapr.demo.finserv.Run consumer /usr/mapr/taq:trades 2 verbose");
 
@@ -113,11 +113,7 @@ public class Consumer {
         for (int i = 0; i < threadCount; i++) {
             BlockingQueue<ProducerRecord<String, byte[]>> q = new ArrayBlockingQueue<>(1000);
             queues.add(q);
-            try {
-                pool.submit(new Sender(getProducer(), getOffsetProducer(), q));
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            pool.submit(new Sender(getProducer(), getOffsetProducer(), q));
         }
 
         configureConsumer();
@@ -128,61 +124,56 @@ public class Consumer {
         int i = 0;
         double t0 = System.nanoTime() * 1e-9;
         double t = t0;
-        try {
-            while (true) {
-                i++;
-                //int qid = i % threadCount;      // Round-robin approach, not recommended because of batching.
-                int qid = 0;
-                // Request unread messages from the topic.
-                ConsumerRecords<String, byte[]> records;
-                records = consumer.poll(POLL_INTERVAL);
-                if (records == null || records.count() == 0) {
-                    if (count >= 10) {
-                        for (int j = 0; j < threadCount; j++)
-                            queues.get(j).put(end);
-                        pool.shutdown();
-                        pool.awaitTermination(900, TimeUnit.SECONDS);
-                        break;
-                    }
-                    continue;
+        while (true) {
+            i++;
+            //int qid = i % threadCount;      // Round-robin approach, not recommended because of batching.
+            int qid=0;
+            // Request unread messages from the topic.
+            ConsumerRecords<String, byte[]> records;
+            records = consumer.poll(POLL_INTERVAL);
+            if (records == null || records.count() == 0) {
+                if (count >= 10) {
+                    System.out.println("The " + topic + "topic is empty. Exiting...");
+                    pool.shutdown();
+                    pool.awaitTermination(10, TimeUnit.SECONDS);
+                    break;
                 }
+                continue;
+            }
 
+            try {
                 for (ConsumerRecord<String, byte[]> raw_record : records) {
-                    try {
-                        String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
-                        byte[] data = raw_record.value();
-                        String sender_id = new String(data, 71, 4);
-                        String send_topic = "/user/mapr/taq:sender_" + sender_id;
-                        qid = send_topic.hashCode() % threadCount;
+                    String key = Long.toString(Calendar.getInstance(TimeZone.getTimeZone("GMT")).getTimeInMillis());
+                    //String key = raw_record.key();  // We're using the key to calculate delay from when the message was sent
+                    byte[] data = raw_record.value();
+                    String sender_id = new String(data, 71, 4);
+                    String send_topic = "/user/mapr/taq:sender_" + sender_id;
+                    qid = send_topic.hashCode() % threadCount;
+                    if (qid < 0) {
+                        qid += threadCount;
+                    }
+                    queues.get(qid).put(new ProducerRecord<>(send_topic, key, data));
+                    for (int j = 0; (79 + j * 4) <= data.length; j++) {
+                        String receiver_id = new String(data, 75 + j * 4, 4);
+                        String recv_topic = "/user/mapr/taq:receiver_" + receiver_id;
+                        qid = recv_topic.hashCode() % threadCount;
                         if (qid < 0) {
                             qid += threadCount;
                         }
-                        queues.get(qid).put(new ProducerRecord<>(send_topic, key, data));
-                        for (int j = 0; (79 + j * 4) <= data.length; j++) {
-                            String receiver_id = new String(data, 75 + j * 4, 4);
-                            String recv_topic = "/user/mapr/taq:receiver_" + receiver_id;
-                            qid = recv_topic.hashCode() % threadCount;
-                            if (qid < 0) {
-                                qid += threadCount;
-                            }
-                            queues.get(qid).put(new ProducerRecord<>(recv_topic, key, data));
-                        }
-                    } catch (StringIndexOutOfBoundsException e) {
-                        System.err.println("ERROR: Unexpected format for record: " + new String(raw_record.value(), 0, raw_record.value().length-1));
-                        e.printStackTrace();
+                        queues.get(qid).put(new ProducerRecord<>(recv_topic, key, data));
                     }
                 }
-                double dt = System.nanoTime() * 1e-9 - t;
-
-                if (dt > 1) {
-                    newcount = count - oldcount;
-                    System.out.printf("Total sent: %d, %.02f Kmsgs/sec\n", count, newcount / (System.nanoTime() * 1e-9 - t0) / 1000);
-                    t = System.nanoTime() * 1e-9;
-                    oldcount = newcount;
-                }
+            } catch (StringIndexOutOfBoundsException e) {
+                System.err.println("Invalid record");
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+            double dt = System.nanoTime() * 1e-9 - t;
+
+            if (dt > 1) {
+                newcount = count-oldcount;
+                System.out.printf("Total sent: %d, %.02f Kmsgs/sec\n", count, newcount/(System.nanoTime() * 1e-9 - t0)/1000);
+                t = System.nanoTime() * 1e-9;
+                oldcount = newcount;
+            }
         }
     }
 

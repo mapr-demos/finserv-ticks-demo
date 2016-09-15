@@ -52,15 +52,15 @@ public class SparkStreamingToHive {
     private static final int BATCH_INTERVAL = 5000;
 
     // Hive table name for persisted ticks
-    private static final String HIVE_TABLE = "streaming_ticks";
+    private static String HIVE_TABLE = "streaming_ticks";
 
     public static void main(String[] args) {
         if (args.length < 1) {
             System.err.println("ERROR: You must specify the stream:topic.");
             System.err.println("USAGE:\n" +
-                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive target/nyse-taq-streaming-1.0-jar-with-dependencies.jar stream:topic\n" +
+                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive target/nyse-taq-streaming-1.0-jar-with-dependencies.jar stream:topic [hive table name]\n" +
                     "EXAMPLE:\n" +
-                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1142");
+                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1142 streaming_ticks");
         }
 
         SparkConf conf = new SparkConf()
@@ -72,6 +72,10 @@ public class SparkStreamingToHive {
 
         String topic = args[0];
         Set<String> topics = Collections.singleton(topic);
+
+        if (args.length == 2)
+            HIVE_TABLE = args[1];
+
         Map<String, String> kafkaParams = new HashMap<>();
         kafkaParams.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
         kafkaParams.put("value.deserializer","org.apache.kafka.common.serialization.ByteArrayDeserializer");
