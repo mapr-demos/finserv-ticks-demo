@@ -1,48 +1,28 @@
 package com.mapr.demo.finserv;
 
-import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.htrace.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.streaming.kafka.v09.OffsetRange;
-import java.io.IOException;
-import com.mapr.demo.finserv.Tick;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 import org.apache.spark.streaming.Duration;
-import org.apache.spark.streaming.Time;
-import org.apache.spark.streaming.api.java.JavaPairInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.kafka.v09.HasOffsetRanges;
-import org.apache.spark.streaming.kafka.v09.KafkaTestUtils;
 import org.apache.spark.streaming.kafka.v09.KafkaUtils;
-import org.apache.spark.streaming.kafka.v09.OffsetRange;
 import scala.Tuple2;
-
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.PrintWriter;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.Scanner;
 
 public class SparkStreamingConsole {
 
+    private static KafkaConsumer offset_consumer;
     private static KafkaConsumer consumer;
+    private static final DateFormat FORMATTER = new SimpleDateFormat("HH:mm:ss:SSS z");
 
     // get the desired offset to look back N seconds
     private static long getOffset(Integer secs) {
@@ -60,107 +40,156 @@ public class SparkStreamingConsole {
     }
 
     // get the latest offset in a topic+partition
-    private static long getLatestOffset(String topic, int partition) {
+    private static long getLatestOffset(KafkaConsumer c, String topic, int partition) {
         long pos;
 
         TopicPartition tp = new TopicPartition(topic, partition);
 
         // seek to the current end of the topic
-        consumer.seekToEnd(tp);
+        c.seekToEnd(tp);
 
         // get the offset of where that is
-        pos = consumer.position(tp);
+        pos = c.position(tp);
 
         return (pos);
     }
 
-    private static final int NUM_THREADS = 1;
+    private static final int NUM_THREADS = 2;
     private static final int BATCH_INTERVAL = 5000;
     public static void main(String[] args) {
         if (args.length < 1) {
             System.err.println("ERROR: You must specify the stream:topic.");
             System.err.println("USAGE:\n" +
-                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingConsole /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1361 [fromOffset]\n");
+                    "\t/opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingConsole /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:sender_1361\n");
+            System.exit(1);
         }
 
         long latestOffset;
-        long fromOffset=0;
-            Scanner user_input = new Scanner(System.in);
-            SparkConf conf = new SparkConf()
-                    .setAppName("TAQ Spark Streaming")
-                    .setMaster("local[" + NUM_THREADS + "]")
-                    .set("spark.driver.allowMultipleContexts", "true");
-            JavaSparkContext sc = new JavaSparkContext(conf);
-            JavaStreamingContext ssc = new JavaStreamingContext(sc, new Duration(BATCH_INTERVAL));
-            HiveContext hiveContext = new org.apache.spark.sql.hive.HiveContext(sc.sc());
+        long fromOffset;
 
-            String topic = args[0];
+        SparkConf conf = new SparkConf()
+                .setAppName("TAQ Spark Streaming")
+                .setMaster("local[" + NUM_THREADS + "]")
+                .set("spark.driver.allowMultipleContexts", "true");
+        JavaSparkContext sc = new JavaSparkContext(conf);
 
-            if (args.length == 2)
-                fromOffset = Long.parseLong(args[1]);
+        String topic = args[0];
+        String offset_topic = topic+"-offset";
 
-            configureConsumer();
-            System.out.println("subscribing to topic: " + topic);
+        Scanner scanner = new Scanner(System.in);
 
-            consumer.subscribe(Arrays.asList(topic));
+        configureConsumer();
+        System.out.println("subscribing to topic: " + offset_topic);
+        offset_consumer.subscribe(Arrays.asList(offset_topic));
+        System.out.println("subscribing to topic: " + topic);
+        consumer.subscribe(Arrays.asList(topic));
 
-        while (true) {
-            ConsumerRecords<String, String> records = consumer.poll(200);
-            System.out.println(records.count() + " records available.");
-
-            latestOffset = getLatestOffset(topic, 0);
-            Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
-            DateFormat formatter = new SimpleDateFormat("HH:mm:ss:ms MM/dd/yyyy");
-            System.out.println("Latest offset = " + latestOffset + " at time " + formatter.format(cal.getTime()));
-            System.out.println("Press ENTER to see refresh.");
-            if (fromOffset == 0) {
-                System.out.print("Enter desired fromOffset: ");
-                String input = user_input.nextLine();
-                if (input.length() == 0)
-                    continue;
-                fromOffset = Long.parseLong(input);
+        System.out.println("--------------------------------------------");
+        // determine fromOffset for lookback
+        Boolean quit = false;
+        while (!quit) {
+            Boolean found = false;
+            System.out.println("How many seconds do you want to records for?");
+            System.out.println("Enter q to quit.");
+            String user_input = scanner.nextLine();
+            if (user_input.equals("q")){
+                quit=true;
+                continue;
             }
+            if (user_input.length() == 0) continue;
+            if (Long.parseLong(user_input) < 0) {
+                System.out.println("Input a number larger than 0.");
+                continue;
+            }
+            Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+            long from_time = cal.getTimeInMillis() - Long.parseLong(user_input)*1000;    // past time (in seconds) for which to fetch records
+            cal.setTimeInMillis(from_time);
+            System.out.println("Fetching records posted to topic " + topic + " since time " + FORMATTER.format(cal.getTime()));
 
-            System.out.println("latest offset: " + latestOffset + " desired fromOffset: " + fromOffset);
+            try {
+                while (!found) {
+                    offset_consumer.poll(2000);
 
-            // see how far we need to look back in the stream
-            // this is used to specify the range of offsets we want in the RDD,
-            // which will be fetched from Kafka/Streams
-            OffsetRange[] offsetRanges = {
-                    OffsetRange.create(topic, 0, fromOffset, latestOffset)
-            };
+                    latestOffset = getLatestOffset(offset_consumer, offset_topic, 0);
 
-            Map<String, String> kafkaParams = new HashMap<>();
-            kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-            kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+                    OffsetRange[] offsetRanges = {
+                            OffsetRange.create(topic + "-offset", 0, 0, latestOffset)
+                    };
 
-            JavaRDD<String> rdd = KafkaUtils.createRDD(
-                    sc,
-                    String.class,
-                    byte[].class,
-                    kafkaParams,
-                    offsetRanges
-            ).map(
-                    new Function<Tuple2<String, byte[]>, String>() {
-                        @Override
-                        public String call(scala.Tuple2<String, byte[]> record) throws Exception {
-                            byte[] data = record._2;
-                            Tick t = new Tick(data);
-                            StringBuilder receivers = new StringBuilder();
-                            for (String id : t.getReceivers())
-                                receivers.append(id + " ");
-                            System.out.printf("%s, %s, %s, %s, %.0f, %.2f\n", t.getDate(), t.getSender(), receivers, t.getSymbolRoot(), t.getTradeVolume(), t.getTradePrice());
-                            return new String(record._2());
+                    Map<String, String> kafkaParams = new HashMap<>();
+                    kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+                    kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+
+                    List<Tuple2<Long, Long>> timed_offsets = KafkaUtils.createRDD(
+                            sc,
+                            String.class,
+                            String.class,
+                            kafkaParams,
+                            offsetRanges
+                    ).map(record -> new Tuple2<Long, Long>(Long.parseLong(new String(record._1)), Long.parseLong(new String(record._2)))
+                    ).collect();
+
+                    for (int i = 0; i < timed_offsets.size() && !found; i++) {
+                        Long timestamp = timed_offsets.get(i)._1;
+                        if (timestamp >= from_time) {
+                            fromOffset = timed_offsets.get(i)._2;
+                            found = true;
+                            cal.setTimeInMillis(timed_offsets.get(i)._1);
+                            System.out.println("offset " + fromOffset + " corresponds to time " + FORMATTER.format(cal.getTime()));
+                            System.out.println("Using offset " + fromOffset);
+                            read_from_offset(sc, topic, fromOffset, user_input);
                         }
                     }
-            );
-
-            System.out.println("--------------------------------\nrdd.count = " + rdd.count());
-            fromOffset = 0;
+                    if (!found) {
+                        System.out.println("No records found in that time range.");
+                        found = true;
+                    }
+                }
+            } catch (org.apache.kafka.common.errors.UnknownTopicOrPartitionException e) {
+                System.out.println ("Topic " + offset_topic + "does not exist, yet.");
+            }
         }
-
+        consumer.unsubscribe();
+        offset_consumer.unsubscribe();
     }
 
+    private static void read_from_offset(JavaSparkContext sc, String topic, long fromOffset, String input) {
+        consumer.poll(2000);
+        System.out.println("getting latestOffset for topic: " + topic);
+        long latestOffset = getLatestOffset(consumer, topic, 0);
+        System.out.println("fetching fromOffset=" + fromOffset + " untilOffset=" + latestOffset);
+
+        OffsetRange[] offsetRanges = {
+                OffsetRange.create(topic, 0, fromOffset, latestOffset)
+        };
+
+        Map<String, String> kafkaParams2 = new HashMap<>();
+        kafkaParams2.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        kafkaParams2.put("value.deserializer", "org.apache.kafka.common.serialization.ByteArrayDeserializer");
+
+        JavaRDD<String> rdd = KafkaUtils.createRDD(
+                sc,
+                String.class,
+                byte[].class,
+                kafkaParams2,
+                offsetRanges
+        ).map(
+                new Function<Tuple2<String, byte[]>, String>() {
+                    @Override
+                    public String call(Tuple2<String, byte[]> record) throws Exception {
+                        Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+                        String key = record._1;
+                        byte[] value = record._2;
+                        cal.setTimeInMillis(Long.parseLong(key));
+                        System.out.println("timesstamp=" + FORMATTER.format(cal.getTime()));
+                        // output Tick in JSON format
+                        System.out.println("\t"+new ObjectMapper().writeValueAsString(new Tick(value)));
+                        return new String(value);
+                    }
+                }
+        );
+        System.out.println("--------------------------------\n" + rdd.count() + " trades recorded in " + topic + " over the past " + input + " seconds.");
+    }
     /* Set the value for configuration parameters.*/
     private static void configureConsumer() {
         Properties props = new Properties();
@@ -173,6 +202,7 @@ public class SparkStreamingConsole {
                 "org.apache.kafka.common.serialization.ByteArrayDeserializer");
         props.put("auto.offset.reset","latest");
 
-        consumer = new KafkaConsumer<String, String>(props);
+        offset_consumer = new KafkaConsumer<String, String>(props);
+        consumer = new KafkaConsumer<String, byte[]>(props);
     }
 }
