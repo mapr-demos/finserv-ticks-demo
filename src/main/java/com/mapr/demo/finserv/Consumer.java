@@ -136,6 +136,7 @@ public class Consumer {
                     System.out.println("The " + topic + "topic is empty. Exiting...");
                     pool.shutdown();
                     pool.awaitTermination(10, TimeUnit.SECONDS);
+                    System.exit(0);
                     break;
                 }
                 continue;
