@@ -18,7 +18,7 @@ public class Tick2Test {
 
 	public static final double N = 1e7;
 
-	@org.junit.Test
+	@Test
 	public void testGetDate() throws IOException {
 		List<String> data = Resources.readLines(Resources.getResource("sample-tick-01.txt"), Charsets.ISO_8859_1);
 		Tick t = new Tick(data.get(0));
@@ -28,7 +28,7 @@ public class Tick2Test {
 		System.out.printf("%s\n", mapper.writeValueAsString(t));
 	}
 
-	@Test
+	//@Test
 	public void testSpeed() throws Exception {
 		List<String> data = Resources.readLines(Resources.getResource("sample-tick-01.txt"), Charsets.ISO_8859_1);
 		ObjectMapper mapper = new ObjectMapper();
@@ -51,7 +51,7 @@ public class Tick2Test {
 		System.out.printf("t = %.3f us, %.2f records/s, %.2f MB/s\n", t / N * 1e6, N / t, size / t / 1e6);
 	}
 
-	@Test
+	//@Test
 	public void testBinarySpeed() throws Exception {
 		List<String> data = Resources.readLines(Resources.getResource("sample-tick-01.txt"), Charsets.ISO_8859_1);
 

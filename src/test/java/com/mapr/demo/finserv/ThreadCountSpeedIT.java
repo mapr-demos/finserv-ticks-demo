@@ -6,7 +6,6 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -16,12 +15,13 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.*;
 import java.util.concurrent.*;
+import org.junit.Test;
 
 /**
  * Tests the effect of threading on message transmission to lots of topics
  */
 @RunWith(Parameterized.class)
-public class ThreadCountSpeedTest {
+public class ThreadCountSpeedIT {
 
 	private static PrintWriter data;
 
@@ -56,7 +56,7 @@ public class ThreadCountSpeedTest {
 		});
 	}
 
-	public ThreadCountSpeedTest(int threadCount, int topicCount) {
+	public ThreadCountSpeedIT(int threadCount, int topicCount) {
 		this.threadCount = threadCount;
 		this.topicCount = topicCount;
 	}

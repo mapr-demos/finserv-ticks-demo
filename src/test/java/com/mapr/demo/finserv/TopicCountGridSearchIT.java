@@ -17,12 +17,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import org.junit.Test;
 
 /**
  * Performance tests intended to explore effect of number of output topics, buffer size, threading and so on.
  */
 @RunWith(Parameterized.class)
-public class TopicCountGridSearchTest {
+public class TopicCountGridSearchIT {
 
 	private final int batchSize;
 	private final int topicCount;
@@ -49,7 +50,7 @@ public class TopicCountGridSearchTest {
 		data.close();
 	}
 
-	public TopicCountGridSearchTest(int batchSize, int topicCount, int messageSize) {
+	public TopicCountGridSearchIT(int batchSize, int topicCount, int messageSize) {
 		this.batchSize = batchSize;
 		this.topicCount = topicCount;
 		this.messageSize = messageSize;
@@ -58,7 +59,7 @@ public class TopicCountGridSearchTest {
 	/**
 	 * This test will not run agnostic of the environment and has been disabled.
 	 */
-	//@Test
+	@Test
 	public void testSpeed() throws IOException {
 		System.out.printf("batchSize = %d, topicCount = %d\n", batchSize, topicCount);
 
