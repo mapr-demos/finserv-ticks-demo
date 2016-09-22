@@ -1,4 +1,6 @@
-/* Copyright (c) 2009 & onwards. MapR Tech, Inc., All rights reserved */
+/*
+ * Copyright (c) 2009 & onwards. MapR Tech, Inc., All rights reserved
+ */
 package com.mapr.demo.finserv;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -13,7 +15,6 @@ import org.ojai.store.QueryCondition;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Properties;
 import java.util.HashSet;
 import java.util.Set;
@@ -21,109 +22,106 @@ import java.util.List;
 
 public class Persister {
 
-    // Declare a new consumer.
-    private static KafkaConsumer consumer;
+	// Declare a new consumer.
+	private static KafkaConsumer consumer;
 
-    // every N rows print a MapR-DB update
-    private static int U_INTERVAL = 100;
+	// every N rows print a MapR-DB update
+	private static final int U_INTERVAL = 100;
 
-    // polling
-    private static int TIMEOUT = 1000;
+	// polling
+	private static final int TIMEOUT = 1000;
 
+	public static void main(String[] args) throws IOException {
+		configureConsumer(args);
 
-    public static void main(String[] args) throws IOException {
-        configureConsumer(args);
+		// we will listen to everything in JSON format after it's
+		// been processed
+		String topic = "/user/mapr/taq:processed";
+		String tableName = "/user/mapr/ticktable";
+		Set<String> syms = new HashSet<>();
+		long nmsgs = 0;
+		Table table;
 
-        // we will listen to everything in JSON format after it's
-        // been processed
-        String topic = "/user/mapr/taq:processed";
-        String tableName = "/user/mapr/ticktable";
-        Set<String> syms = new HashSet<String>();
-        long nmsgs = 0;
-        Table table;
+		if (args.length == 1) {
+			topic = args[0];
+		}
 
-        if (args.length == 1) {
-            topic = args[0];
-        }
+		List<String> topics = new ArrayList<>();
+		topics.add(topic);
 
-        List<String> topics = new ArrayList<String>();
-        topics.add(topic);
+		// subscribe to the raw data
+		System.out.println("subscribing to " + topic);
+		consumer.subscribe(topics);
 
-        // subscribe to the raw data
-        System.out.println("subscribing to " + topic);
-        consumer.subscribe(topics);
+		// delete the old table if it's there
+		if (MapRDB.tableExists(tableName)) {
+			System.out.println("deleting old table " + tableName);
+			MapRDB.deleteTable(tableName);
+		}
 
-        // delete the old table if it's there
-        if (MapRDB.tableExists(tableName)) {
-            System.out.println("deleting old table " + tableName);
-            MapRDB.deleteTable(tableName);
-        }
+		// make a new table
+		table = MapRDB.createTable(tableName);
 
-        // make a new table
-        table = MapRDB.createTable(tableName);
+		// probably want this
+		table.setOption(Table.TableOption.BUFFERWRITE, true);
 
-        // probably want this
-        table.setOption(Table.TableOption.BUFFERWRITE, true);
+		// request everything
+		for (;;) {
+			ConsumerRecords<String, String> msg = consumer.poll(TIMEOUT);
+			if (msg.count() == 0) {
+				System.out.println("No messages after 1 second wait.");
+			}
+			else {
+				System.out.println("Read " + msg.count() + " messages");
+				nmsgs += msg.count();
 
-        // request everything
-        for (;;) {
-            ConsumerRecords<String, String> msg = consumer.poll(TIMEOUT);
-            if (msg.count() == 0) {
-                System.out.println("No messages after 1 second wait.");
-            } else {
-                System.out.println("Read " + msg.count() + " messages");
-                nmsgs += msg.count();
+				// Iterate through returned records, extract the value
+				// of each message, and print the value to standard output.
+				Iterator<ConsumerRecord<String, String>> iter = msg.iterator();
+				while (iter.hasNext()) {
+					ConsumerRecord<String, String> record = iter.next();
 
-                // Iterate through returned records, extract the value
-                // of each message, and print the value to standard output.
-                Iterator<ConsumerRecord<String, String>> iter = msg.iterator();
-                while (iter.hasNext()) {
-                    ConsumerRecord<String, String> record = iter.next();
+					// XXX won't have this problem when string is encoded correctly - just
+					// XXX for testing
+					String cleaned = record.value().replaceAll("\\p{Cntrl}", "");
 
-                    // XXX won't have this problem when string is encoded correctly - just
-                    // XXX for testing
-                    String cleaned = record.value().replaceAll("\\p{Cntrl}", ""); 
+					// use the _id field in the msg
+					Document document = MapRDB.newDocument(cleaned);
 
-                    // use the _id field in the msg
-                    Document document = MapRDB.newDocument(cleaned);
+					String this_sym = document.getString("symbol");
+					syms.add(this_sym);
 
-                    String this_sym = document.getString("symbol");
-                    syms.add(this_sym);
+					// save document into the table
+					table.insertOrReplace(document);
+				}
+			}
 
-                    // save document into the table
-                    table.insertOrReplace(document);
-                }
-            }
+			if ((msg.count() != 0) && (nmsgs % U_INTERVAL) == 0) {
+				System.out.println("Write update per-symbol:");
+				System.out.println("------------------------");
 
-            if ((msg.count() != 0) && (nmsgs % U_INTERVAL) == 0) {
-                System.out.println("Write update per-symbol:");
-                System.out.println("------------------------");
+				for (String s : syms) {
+					QueryCondition cond = MapRDB.newCondition()
+						.is("symbol", QueryCondition.Op.EQUAL, s).build();
+					DocumentStream results = table.find(cond);
+					int c = 0;
+					for (Document d : results) {
+						c++;
+					}
+					System.out.println("\t" + s + ": " + c);
+				}
+			}
+		}
+	}
 
-                for (String s : syms) {
-                    QueryCondition cond = MapRDB.newCondition()
-                        .is("symbol", QueryCondition.Op.EQUAL, s).build();
-                    DocumentStream results = table.find(cond);
-                    int c = 0;
-                    for (Document d : results) {
-                            c++;
-                    }
-                    System.out.println("\t" + s + ": " + c);
-                }
-            }
-        }
-    }
-
-    /* Set the value for configuration parameters.*/
-    private static void configureConsumer(String[] args) {
-        Properties props = new Properties();
-        // cause consumers to start at beginning of topic on first read
-        props.put("auto.offset.reset", "earliest");
-        props.put("key.deserializer",
-                "org.apache.kafka.common.serialization.StringDeserializer");
-        //  which class to use to deserialize the value of each message
-        props.put("value.deserializer",
-                "org.apache.kafka.common.serialization.StringDeserializer");
-
-        consumer = new KafkaConsumer<String, String>(props);
-    }
+	/*
+	 * cause consumers to start at beginning of topic on first read
+	 */
+	private static void configureConsumer(String[] args) {
+		Properties props = new Properties();
+		props.put("auto.offset.reset", "earliest");
+		props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+		props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+		consumer = new KafkaConsumer<>(props);
+	}
 }

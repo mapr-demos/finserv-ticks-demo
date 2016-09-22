@@ -5,125 +5,104 @@ import java.io.File;
 import java.io.FileReader;
 
 import com.google.common.base.Charsets;
-import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
-import org.apache.kafka.common.serialization.StringSerializer;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Calendar;
 import java.util.LinkedList;
 import java.util.Properties;
-import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Producer {
 
-    private static KafkaProducer producer;
-    private static LinkedList<File> datafiles = new LinkedList<>();
-    static long records_processed = 0L;
+	private static KafkaProducer producer;
+	private static final LinkedList<File> DATAFILES = new LinkedList<>();
+	private static final AtomicLong PROCESSED = new AtomicLong();
+	private final String topic;
+	private final File directory;
 
+	public Producer(final String topic, final File directory) {
+		this.topic = topic;
+		this.directory = directory;
+		configureProducer();
+		if (directory.isDirectory()) {
+			for (final File fileEntry : directory.listFiles()) {
+				if (fileEntry.isDirectory()) {
+					System.err.println("WARNING: skipping files in directory " + fileEntry.getName());
+				}
+				else {
+					DATAFILES.add(fileEntry);
+				}
+			}
+		}
+		else {
+			DATAFILES.add(directory);
+		}
+	}
 
-    public static void main(String[] args) throws IOException {
-        if (args.length < 3) {
-            System.err.println("ERROR: You must specify the input data file and stream:topic.");
-            System.err.println("USAGE:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run producer [source file | source directory] [stream:topic]\n" +
-                    "Example:\n" +
-                    "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run producer data/taqtrade20131218 /usr/mapr/taq:trades");
+	public void produce() throws IOException {
+		System.out.println("Publishing data from " + DATAFILES.size() + " files.");
+		long startTime = System.nanoTime();
+		long last_update = 0;
 
-        }
+		for (final File f : DATAFILES) {
+			FileReader fr = new FileReader(f);
+			BufferedReader reader = new BufferedReader(fr);
+			String line = reader.readLine();
 
-        String topic = args[2];
-        System.out.println("Publishing to topic: " + topic);
+			try {
+				while (line != null) {
+					long current_time = System.nanoTime();
+					String key = Long.toString(current_time);
+					//String key = Long.toString(Calendar.getInstance(TimeZone.getTimeZone("GMT")).getTimeInMillis());
+					ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, line.getBytes(Charsets.ISO_8859_1));
 
-        configureProducer();
-        File directory = new File(args[1]);
+					producer.send(record, (RecordMetadata metadata, Exception e) -> {
+						PROCESSED.incrementAndGet();
+					});
 
-        if (directory.isDirectory()) {
-            for (final File fileEntry : directory.listFiles()) {
-                if (fileEntry.isDirectory()) {
-                    System.err.println("WARNING: skipping files in directory " + fileEntry.getName());
-                } else {
-                    datafiles.add(fileEntry);
-                }
-            }
-        } else {
-            datafiles.add(directory);
-        }
+					// Print performance stats once per second
+					if ((Math.floor(current_time - startTime) / 1e9) > last_update) {
+						last_update++;
+						producer.flush();
+						printStatus(PROCESSED.get(), 1, startTime);
+					}
+					line = reader.readLine();
+				}
 
-        System.out.println ("Publishing data from " + datafiles.size() + " files.");
-        long startTime = System.nanoTime();
-        long last_update = 0;
+			}
+			catch (Exception e) {
+				System.err.println("ERROR: " + e);
+			}
+		}
+		producer.flush();
+		try {
+			Thread.sleep(2000);
+		}
+		catch (InterruptedException e) {
+		}
+		System.out.println("Published " + PROCESSED + " messages to stream.");
+		System.out.println("Finished.");
+		producer.close();
+	}
 
-        for (final File f : datafiles) {
-            FileReader fr = new FileReader(f);
-            BufferedReader reader = new BufferedReader(fr);
-            String line = reader.readLine();
+	/**
+	 * Set the value for a configuration parameter. This configuration parameter specifies which class to use to
+	 * serialize the value of each message.
+	 */
+	public static void configureProducer() {
+		Properties props = new Properties();
+		props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+		props.put("value.serializer", "org.apache.kafka.common.serialization.ByteArraySerializer");
+		producer = new KafkaProducer<>(props);
+	}
 
-            try {
-                while (line != null) {
-                    long current_time = System.nanoTime();
-                    String key = Long.toString(current_time);
-                    //String key = Long.toString(Calendar.getInstance(TimeZone.getTimeZone("GMT")).getTimeInMillis());
-                    ProducerRecord<String, byte[]> record = new ProducerRecord<>(topic, key, line.getBytes(Charsets.ISO_8859_1));
-
-                    // Send the record to the producer client library.
-//                producer.send(rec);
-                    producer.send(record,
-                            new Callback() {
-                                public void onCompletion(RecordMetadata metadata, Exception e) {
-                                    records_processed++;
-                                    if (e != null)
-                                        e.printStackTrace();
-                                }
-                            });
-
-
-                    // Print performance stats once per second
-                    if ((Math.floor(current_time - startTime) / 1e9) > last_update) {
-                        last_update++;
-                        producer.flush();
-                        print_status(records_processed, 1, startTime);
-                    }
-                    line = reader.readLine();
-                }
-
-            } catch (Exception e) {
-                System.err.println("ERROR: " + e);
-            }
-        }
-        producer.flush();
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        System.out.println("Published " + records_processed + " messages to stream.");
-        System.out.println("Finished.");
-        producer.close();
-    }
-
-    /* Set the value for a configuration parameter.
-     This configuration parameter specifies which class
-     to use to serialize the value of each message.*/
-    public static void configureProducer() {
-        Properties props = new Properties();
-        props.put("key.serializer",
-                "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("value.serializer",
-                "org.apache.kafka.common.serialization.ByteArraySerializer");
-
-        producer = new KafkaProducer<String, String>(props);
-    }
-
-    public static void print_status(long records_processed, int poolSize, long startTime) {
-        long elapsedTime = System.nanoTime() - startTime;
-        System.out.printf("Throughput = %.2f Kmsgs/sec published. Threads = %d. Total published = %d.\n",
-                records_processed / ((double) elapsedTime / 1000000000.0) / 1000,
-                poolSize,
-                records_processed);
-    }
+	public static void printStatus(long records_processed, int poolSize, long startTime) {
+		long elapsedTime = System.nanoTime() - startTime;
+		System.out.printf("Throughput = %.2f Kmsgs/sec published. Threads = %d. Total published = %d.\n",
+			records_processed / ((double) elapsedTime / 1000000000.0) / 1000,
+			poolSize,
+			records_processed);
+	}
 }
