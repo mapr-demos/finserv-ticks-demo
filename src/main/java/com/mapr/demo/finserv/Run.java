@@ -18,7 +18,7 @@ public class Run {
 		final String message = "USAGE:\n"
 				+ "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run producer [source data file] [stream:topic]\n"
 				+ "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run consumer [stream:topic]\n";
-		Preconditions.checkArgument(args.length < 1, message);
+		Preconditions.checkArgument(args.length > 1, message);
 
 		switch (args[0]) {
 			case "producer":
@@ -39,7 +39,7 @@ public class Run {
 		final String message = "ERROR: You must specify the input data file and stream:topic.\n" +
 			"USAGE:\n\tjava -cp `mapr classpath` -jar producer [source file | source directory] [stream:topic]\n" + 
 			"Example:\n\tjava -cp `mapr classpath` -jar producer data/taqtrade20131218 /usr/mapr/taq:trades";
-		Preconditions.checkArgument(args.length < 3, message);
+		Preconditions.checkArgument(args.length == 3, message);
 
 		String topic = args[2];
 		LOG.debug("Publishing to topic: {}", topic);
@@ -53,7 +53,7 @@ public class Run {
 		final String message = "ERROR: You must specify a stream:topic to consume data from.\n" +
 			"USAGE:\n\tjava -cp `mapr classpath` -jar consumer [stream:topic] [NUM_THREADS] [verbose]\n" + 
 			"Example:\n\tjava -cp `mapr classpath` -jar consumer /usr/mapr/taq:trades 2 verbose";
-		Preconditions.checkArgument(args.length < 2, message);
+		Preconditions.checkArgument(args.length > 2 && args.length < 5, message);
 
 		String topic = args[1];
 		LOG.debug("Subscribed to : {}", topic);
