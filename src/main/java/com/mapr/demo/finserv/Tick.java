@@ -152,6 +152,5 @@ public class Tick implements Serializable {
 		if (n != length) {
 			throw new IOException("Couldn't read entire Tick object, only got " + n + " bytes");
 		}
-
 	}
 }

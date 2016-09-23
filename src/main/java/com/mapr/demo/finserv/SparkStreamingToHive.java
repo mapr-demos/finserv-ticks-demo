@@ -42,8 +42,12 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.apache.spark.streaming.kafka.v09.KafkaUtils;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.hive.HiveContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SparkStreamingToHive {
+
+	private static final Logger LOG = LoggerFactory.getLogger(SparkStreamingToHive.class);
 
 	private static final int NUM_THREADS = 1;
 

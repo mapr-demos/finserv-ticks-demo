@@ -19,8 +19,12 @@ import java.util.Properties;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Persister {
+
+	private static final Logger LOG = LoggerFactory.getLogger(Persister.class);
 
 	// Declare a new consumer.
 	private static KafkaConsumer consumer;

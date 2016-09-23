@@ -16,8 +16,12 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Consumer {
+
+	private static final Logger LOG = LoggerFactory.getLogger(Consumer.class);
 
 	private static final long POLL_INTERVAL = 4000;  // consumer poll every X milliseconds
 	private static final long OFFSET_INTERVAL = 10000;  // record offset once every X messages

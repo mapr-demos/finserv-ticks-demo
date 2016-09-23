@@ -1,24 +1,25 @@
 package com.mapr.demo.finserv;
 
+import com.google.common.base.Preconditions;
 import static com.mapr.demo.finserv.Producer.configureProducer;
 import java.io.File;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
 import java.io.IOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Pick whether we want to run as producer or consumer. This lets us have a single executable as a build target.
  */
 public class Run {
 
-	public static void main(String[] args) throws IOException, Exception {
-		Logger.getRootLogger().setLevel(Level.OFF);
+	private static final Logger LOG = LoggerFactory.getLogger(Run.class);
 
-		if (args.length < 1) {
-			System.err.println("USAGE:\n"
+	public static void main(String[] args) throws IOException, Exception {
+		final String message = "USAGE:\n"
 				+ "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run producer [source data file] [stream:topic]\n"
-				+ "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run consumer [stream:topic]\n");
-		}
+				+ "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run consumer [stream:topic]\n";
+		Preconditions.checkArgument(args.length < 1, message);
+
 		switch (args[0]) {
 			case "producer":
 				Producer producer = getProducer(args);
@@ -35,17 +36,13 @@ public class Run {
 	}
 
 	private static Producer getProducer(final String args[]) {
-		if (args.length < 3) {
-			System.err.println("ERROR: You must specify the input data file and stream:topic.");
-			System.err.println("USAGE:\n"
-				+ "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run producer [source file | source directory] [stream:topic]\n"
-				+ "Example:\n"
-				+ "\tjava -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.examples.Run producer data/taqtrade20131218 /usr/mapr/taq:trades");
-			System.exit(-1);
-		}
+		final String message = "ERROR: You must specify the input data file and stream:topic.\n" +
+			"USAGE:\n\tjava -cp `mapr classpath` -jar producer [source file | source directory] [stream:topic]\n" + 
+			"Example:\n\tjava -cp `mapr classpath` -jar producer data/taqtrade20131218 /usr/mapr/taq:trades";
+		Preconditions.checkArgument(args.length < 3, message);
 
 		String topic = args[2];
-		System.out.println("Publishing to topic: " + topic);
+		LOG.debug("Publishing to topic: {}", topic);
 
 		configureProducer();
 		File directory = new File(args[1]);
@@ -53,22 +50,17 @@ public class Run {
 	}
 
 	private static Consumer getConsumer(final String args[]) {
-		if (args.length < 2) {
-			System.err.println("ERROR: You must specify a stream:topic to consume data from.");
-			System.err.println("USAGE:\n"
-				+ "\tjava -cp `mapr classpath`:/mapr/ian.cluseter.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [NUM_THREADS] [verbose]\n"
-				+ "Example:\n"
-				+ "\tjava -cp `mapr classpath`:/mapr/ian.cluseter.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar:/mapr/ian.cluster.com/user/mapr/resources/ com.mapr.demo.finserv.Run consumer /usr/mapr/taq:trades 2 verbose");
-			System.exit(-1);
-		}
+		final String message = "ERROR: You must specify a stream:topic to consume data from.\n" +
+			"USAGE:\n\tjava -cp `mapr classpath` -jar consumer [stream:topic] [NUM_THREADS] [verbose]\n" + 
+			"Example:\n\tjava -cp `mapr classpath` -jar consumer /usr/mapr/taq:trades 2 verbose";
+		Preconditions.checkArgument(args.length < 2, message);
 
 		String topic = args[1];
-		System.out.println("Subscribed to : " + topic);
-		boolean verbose = false;
+		LOG.debug("Subscribed to : {}", topic);
+		
+		boolean verbose = "verbose".equals(args[args.length - 1]);
+
 		int threadCount = 1;
-		if ("verbose".equals(args[args.length - 1])) {
-			verbose = true;
-		}
 		if (args.length == 4) {
 			threadCount = Integer.valueOf(args[2]);
 		}

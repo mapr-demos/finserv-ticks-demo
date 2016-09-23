@@ -21,27 +21,18 @@ import java.util.Random;
 import java.util.Scanner;
 import java.util.TimeZone;
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SparkStreamingConsole {
 
+	private static final Logger LOG = LoggerFactory.getLogger(SparkStreamingConsole.class);
+
 	private static final int NUM_THREADS = 2;
-	private static final int BATCH_INTERVAL = 5000;
 
 	private static KafkaConsumer offset_consumer;
 	private static KafkaConsumer consumer;
 	private static final DateFormat FORMATTER = new SimpleDateFormat("HH:mm:ss:SSS z");
-
-	// get the desired offset to look back N seconds
-	private static long getOffset(Integer secs) {
-		/**
-		 * in the future version of this function we will: - query MapR-DB or a Streams topic to get the expected offset
-		 * in the stream - return the offset, which will be used as an offsetRange when setting up the context for now,
-		 * we just do a simple map of minutes -> offset this could be way off but just for example purposes
-		 */
-		final long OFFSETS_PER_SEC = 300000;
-
-		return (secs * OFFSETS_PER_SEC);
-	}
 
 	/**
 	 * get the latest offset in a topic+partition
