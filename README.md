@@ -1,3 +1,5 @@
+BY USING THIS SOFTWARE, YOU EXPRESSLY ACCEPT AND AGREE TO THE TERMS OF THE AGREEMENT CONTAINED IN THIS GITHUB REPOSITORY.  See the file EULA.md for details.
+
 # Processing engine for NYSE Market data
 
 This project provides a processing engine for ingesting real time streams of NYSE trades and quotes into MapR-DB.
