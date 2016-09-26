@@ -1,24 +1,27 @@
 /*
  * Copyright (c) 2009 & onwards. MapR Tech, Inc., All rights reserved
+ * 
+ * This class is provided as a teaching example to persist data into MapR-DB, and is not
+ * run as part of the main demo.
  */
 package com.mapr.demo.finserv;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.htrace.fasterxml.jackson.databind.ObjectMapper;
+import org.ojai.exceptions.DecodingException;
 import com.mapr.db.MapRDB;
 import com.mapr.db.Table;
 import org.ojai.Document;
 import org.ojai.DocumentStream;
 import org.ojai.store.QueryCondition;
+import java.util.*;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.Properties;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,42 +74,44 @@ public class Persister {
 
 		// request everything
 		for (;;) {
-			ConsumerRecords<String, String> msg = consumer.poll(TIMEOUT);
-			if (msg.count() == 0) {
-				System.out.println("No messages after 1 second wait.");
+			// Request unread messages from the topic.
+			ConsumerRecords<String, byte[]> records;
+			records = consumer.poll(TIMEOUT);
+			if (records == null || records.count() == 0) {
+				System.out.println("The " + topic + "topic is currently empty, no records");
+				continue;
 			}
-			else {
-				System.out.println("Read " + msg.count() + " messages");
-				nmsgs += msg.count();
+			try {
+				for (ConsumerRecord<String, byte[]> raw_record : records) {
+					String key = Long.toString(Calendar.getInstance(TimeZone.getTimeZone("GMT")).getTimeInMillis());
+                    byte[] data = raw_record.value();
 
-				// Iterate through returned records, extract the value
-				// of each message, and print the value to standard output.
-				Iterator<ConsumerRecord<String, String>> iter = msg.iterator();
-				while (iter.hasNext()) {
-					ConsumerRecord<String, String> record = iter.next();
 
-					// XXX won't have this problem when string is encoded correctly - just
-					// XXX for testing
-					String cleaned = record.value().replaceAll("\\p{Cntrl}", "");
+                    Tick writeTick = new Tick(data);
+                    syms.add(writeTick.getSymbolRoot());
 
-					// use the _id field in the msg
-					Document document = MapRDB.newDocument(cleaned);
+                    // This is just one way to do CRUD operations, for more examples, see:
+                    // http://maprdocs.mapr.com/home/MapR-DB/JSON_DB/creating_documents_with_maprdb_ojai_java_api_.html
+                    // https://github.com/mapr-demos/maprdb-ojai-101
 
-					String this_sym = document.getString("symbol");
-					syms.add(this_sym);
-
-					// save document into the table
-					table.insertOrReplace(document);
-				}
+                    try {
+                        Document document = MapRDB.newDocument(new ObjectMapper().writeValueAsString(writeTick));
+                        table.insertOrReplace(writeTick.getTradeSequenceNumber(), document);
+                    } catch (DecodingException e) {
+                            System.err.println("decoding exception");
+                    }
+                    nmsgs++;
+			    }
+            } catch (StringIndexOutOfBoundsException e) {
+				System.err.println("Invalid record");
 			}
-
-			if ((msg.count() != 0) && (nmsgs % U_INTERVAL) == 0) {
+			if ((nmsgs % U_INTERVAL) == 0) {
 				System.out.println("Write update per-symbol:");
 				System.out.println("------------------------");
 
 				for (String s : syms) {
 					QueryCondition cond = MapRDB.newCondition()
-						.is("symbol", QueryCondition.Op.EQUAL, s).build();
+						.is("symbolRoot", QueryCondition.Op.EQUAL, s).build();
 					DocumentStream results = table.find(cond);
 					int c = 0;
 					for (Document d : results) {
@@ -116,7 +121,7 @@ public class Persister {
 				}
 			}
 		}
-	}
+    }
 
 	/*
 	 * cause consumers to start at beginning of topic on first read
@@ -125,7 +130,7 @@ public class Persister {
 		Properties props = new Properties();
 		props.put("auto.offset.reset", "earliest");
 		props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-		props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+		props.put("value.deserializer", "org.apache.kafka.common.serialization.ByteArrayDeserializer");
 		consumer = new KafkaConsumer<>(props);
 	}
 }
