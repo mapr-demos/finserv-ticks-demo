@@ -89,7 +89,7 @@ public class ThreadCountSpeedTest {
     public void testThreads() throws Exception {
         System.out.printf("threadCount = %d, topicCount = %d\n", threadCount, topicCount);
 
-        String stream = "/mapr/se1/user/tdunning/taq";
+        String stream = "/mapr/my.cluster.com/user/mapr/taq";
         List<String> ourTopics = Lists.newArrayList();
         for (int i = 0; i < topicCount; i++) {
             ourTopics.add(String.format("%s:t-%05d", stream, i));
