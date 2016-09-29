@@ -22,6 +22,10 @@ import java.util.concurrent.*;
  */
 @RunWith(Parameterized.class)
 public class ThreadCountSpeedTest {
+    private static final String STREAM = "/mapr/my.cluster.com/user/mapr/taq";
+    private static final double TIMEOUT = 30;  // seconds
+    private static final int BATCH_SIZE = 1000000;  // The unit of measure for throughput is "batch size" per second
+                                                    // e.g. Throughput = X "millions of messages" per sec
 
     @BeforeClass
     public static void openDataFile() throws FileNotFoundException {
@@ -36,9 +40,6 @@ public class ThreadCountSpeedTest {
 
     private static PrintWriter data;
 
-    private double timeout = 30;
-    private int batch = 1000000;
-
     @Parameterized.Parameters(name = "{index}: threads={0}, topics={1}")
     public static Iterable<Object[]> data() {
         return Arrays.asList(new Object[][]{
@@ -50,10 +51,9 @@ public class ThreadCountSpeedTest {
         });
     }
 
-    private int threadCount;
-    private int topicCount;
-    private int messageSize = 100;
-    private int batchSize = 0;
+    private int threadCount; // number of concurrent Kafka producers to run
+    private int topicCount;  // number of Kafka topics in our stream
+    private int messageSize = 100;  // size of each message sent into Kafka
 
     private static final ProducerRecord<String, byte[]> end = new ProducerRecord<>("end", null);
 
@@ -66,7 +66,7 @@ public class ThreadCountSpeedTest {
         private final KafkaProducer<String, byte[]> producer;
         private final BlockingQueue<ProducerRecord<String, byte[]>> queue;
 
-        public Sender(KafkaProducer<String, byte[]> producer, BlockingQueue<ProducerRecord<String, byte[]>> queue) {
+        private Sender(KafkaProducer<String, byte[]> producer, BlockingQueue<ProducerRecord<String, byte[]>> queue) {
             this.producer = producer;
             this.queue = queue;
         }
@@ -76,6 +76,11 @@ public class ThreadCountSpeedTest {
             try {
                 ProducerRecord<String, byte[]> rec = queue.take();
                 while (rec != end) {
+                    // Here's were the sender thread sends a message.
+                    // Since we're not supplying a callback the send will be done asynchronously.
+                    // The outgoing message will go to a local buffer which is not necessarily FIFO,
+                    // but sending messages out-of-order does not matter since we're just trying to
+                    // test throughput in this class.
                     producer.send(rec);
                     rec = queue.take();
                 }
@@ -89,46 +94,77 @@ public class ThreadCountSpeedTest {
     public void testThreads() throws Exception {
         System.out.printf("threadCount = %d, topicCount = %d\n", threadCount, topicCount);
 
-        String stream = "/mapr/my.cluster.com/user/mapr/taq";
+        // Create new topic names. Kafka will automatically create these topics if they don't already exist.
         List<String> ourTopics = Lists.newArrayList();
         for (int i = 0; i < topicCount; i++) {
-            ourTopics.add(String.format("%s:t-%05d", stream, i));
+            // Topic names will look like, "t-00874"
+            ourTopics.add(String.format("%s:t-%05d", STREAM, i));
         }
-        Random rand = new Random();
 
+        // Create a message containing random bytes. We'll send this message over and over again
+        // in our performance test, below.
+        Random rand = new Random();
         byte[] buf = new byte[messageSize];
         rand.nextBytes(buf);
         Tick message = new Tick(buf);
 
+        // Create a pool of sender threads.
         ExecutorService pool = Executors.newFixedThreadPool(threadCount);
+
+        // We need some way to give each sender messages to publish.
+        // We'll do that via this list of queues.
         List<BlockingQueue<ProducerRecord<String, byte[]>>> queues = Lists.newArrayList();
         for (int i = 0; i < threadCount; i++) {
+            // We use BlockingQueue to buffer messages for each sender.
+            // We use this type not for concurrency reasons (although it is thread safe) but
+            // rather because it provides an efficient way for senders to take messages if
+            // they're available and for us to generate those messages (see below).
             BlockingQueue<ProducerRecord<String, byte[]>> q = new ArrayBlockingQueue<>(1000);
             queues.add(q);
+            // spawn each thread with a reference to "q", which we'll add messages to later.
             pool.submit(new Sender(getProducer(), q));
         }
 
         double t0 = System.nanoTime() * 1e-9;
         double batchStart = 0;
 
-        for (int i = 0; i < 1e9; ) {
-            for (int j = 0; j < batch; j++) {
+        // Now we're going to send messages. We'll send messages in batches.
+        // The batch size was defined above as containing 1 million messages.
+        // We want to send as many messages as possible until a timeout has been reached.
+        // The timeout was defined above as 30 seconds.
+        // We'll break out of this loop when that timeout occurs.
+        for (int i = 0; i >= 0 && i < Integer.MAX_VALUE; ) {
+            // For each message in our batch (of 1 million messages), send that message
+            // to a random topic.
+            for (int j = 0; j < BATCH_SIZE; j++) {
+                // Get a random topic
                 String topic = ourTopics.get(rand.nextInt(topicCount));
+                // Select a random sender thread
                 int qid = topic.hashCode() % threadCount;
                 if (qid < 0) {
                     qid += threadCount;
                 }
+                // Put a message to be published in the queue belonging to the sender we just selected.
+                // That sender will automatically send this message as soon as possible.
                 queues.get(qid).put(new ProducerRecord<>(topic, message.getData()));
             }
-            i += batch;
+            i += BATCH_SIZE;
             double t = System.nanoTime() * 1e-9 - t0;
             double dt = t - batchStart;
             batchStart = t;
-            data.printf("%d,%d,%d,%.3f,%.1f,%.3f,%.1f\n", threadCount, topicCount, i, t, i / t, dt, batch / dt);
-            if (t > timeout) {
+            // i = number of batches (number of "1 million messages" sent)
+            // t = total elapsed time
+            // i/t = throughput (number of batches sent overall per second)
+            // dt = elapsed time for this batch
+            // batch / dt = millions of messages sent per second for this batch
+            data.printf("%d,%d,%d,%.3f,%.1f,%.3f,%.1f\n", threadCount, topicCount, i, t, i / t, dt, BATCH_SIZE / dt);
+            if (t > TIMEOUT) {
                 break;
             }
         }
+        // We cleanly shutdown each producer thread by sending the predefined "end" message
+        // then shutdown the threads in the pool after giving them a few seconds to see that
+        // end message.
         for (int i = 0; i < threadCount; i++) {
             queues.get(i).add(end);
         }
@@ -137,12 +173,14 @@ public class ThreadCountSpeedTest {
     }
 
     KafkaProducer<String, byte[]> getProducer() throws IOException {
-        Properties p = new Properties();
-        p.load(Resources.getResource("producer.props").openStream());
+        Properties props = new Properties();
+        props.load(Resources.getResource("producer.props").openStream());
+        // Properties reference:
+        // https://kafka.apache.org/090/javadoc/index.html?org/apache/kafka/clients/producer/KafkaProducer.html
+        // props.put("batch.size", 16384);
+        // props.put("linger.ms", 1);
+        // props.put("buffer.memory", 33554432);
 
-        if (batchSize > 0) {
-            p.setProperty("batch.size", String.valueOf(batchSize));
-        }
-        return new KafkaProducer<>(p);
+        return new KafkaProducer<>(props);
     }
 }
