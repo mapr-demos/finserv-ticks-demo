@@ -25,12 +25,12 @@ public class ThreadCountSpeedTest {
     private static final String STREAM = "/mapr/my.cluster.com/user/mapr/taq";
     private static final double TIMEOUT = 30;  // seconds
     private static final int BATCH_SIZE = 1000000;  // The unit of measure for throughput is "batch size" per second
-                                                    // e.g. Throughput = X "millions of messages" per sec
+    // e.g. Throughput = X "millions of messages" per sec
 
     @BeforeClass
     public static void openDataFile() throws FileNotFoundException {
         data = new PrintWriter(new File("thread-count.csv"));
-        data.printf("threadCount, topicCount, messageSize, i, t, rate, dt, batchRate\n");
+        data.printf("threadCount, topicCount, i, t, rate, dt, batchRate\n");
     }
 
     @AfterClass
@@ -128,25 +128,35 @@ public class ThreadCountSpeedTest {
         double t0 = System.nanoTime() * 1e-9;
         double batchStart = 0;
 
-        // Now we're going to send messages. We'll send messages in batches.
+        // -------- Generate Messages for each Sender --------
+        // Generate BATCH_SIZE messages at a time and send each one to a random sender thread.
         // The batch size was defined above as containing 1 million messages.
         // We want to send as many messages as possible until a timeout has been reached.
         // The timeout was defined above as 30 seconds.
         // We'll break out of this loop when that timeout occurs.
         for (int i = 0; i >= 0 && i < Integer.MAX_VALUE; ) {
-            // For each message in our batch (of 1 million messages), send that message
-            // to a random topic.
+            // Send each message in our batch (of 1 million messages) to a random topic.
             for (int j = 0; j < BATCH_SIZE; j++) {
-                // Get a random topic
+                // Get a random topic (but always assign it to the same sender thread)
                 String topic = ourTopics.get(rand.nextInt(topicCount));
-                // Select a random sender thread
+                // The topic hashcode works in the sense that equal topics always have equal hashes.
+                // So this will ensure that a topic will always be populated by the same sender thread.
+                // We want to load balance senders without using round robin, because with round robin
+                // all senders would have to send to all topics, and we've found that it's much faster
+                // to minimize the number of topics each kafka producer sends to.
+                // By using this hashcode we can maintain affinity between Kafka topic and sender thread.
                 int qid = topic.hashCode() % threadCount;
                 if (qid < 0) {
                     qid += threadCount;
                 }
-                // Put a message to be published in the queue belonging to the sender we just selected.
-                // That sender will automatically send this message as soon as possible.
-                queues.get(qid).put(new ProducerRecord<>(topic, message.getData()));
+                try {
+                    // Put a message to be published in the queue belonging to the sender we just selected.
+                    // That sender will automatically send this message as soon as possible.
+                    queues.get(qid).put(new ProducerRecord<>(topic, message.getData()));
+                } catch (Exception e) {
+                    // BlockingQueue might throw an IllegalStateException if the queue fills up.
+                    e.printStackTrace();
+                }
             }
             i += BATCH_SIZE;
             double t = System.nanoTime() * 1e-9 - t0;
