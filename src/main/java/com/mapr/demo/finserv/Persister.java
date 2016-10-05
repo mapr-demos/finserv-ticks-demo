@@ -1,6 +1,27 @@
 /* Copyright (c) 2009 & onwards. MapR Tech, Inc., All rights reserved */
 package com.mapr.demo.finserv;
 
+/******************************************************************************
+ * PURPOSE:
+ *   This Kafka consumer reads NYSE Tick data from a MapR Stream topic and
+ *   persists each message in a MapR-DB table as a JSON Document, which can
+ *   later be queried using Apache Drill (for example).
+ *
+ * EXAMPLE USAGE:
+ *   java -cp ~/nyse-taq-streaming-1.0.jar:$CP com.mapr.demo.finserv.Persister /user/mapr/taq:sender_1361
+ *
+ * EXAMPLE QUERIES FOR MapR dbshell:
+ *      mapr dbshell
+ *          find /user/mapr/ticktable
+ *
+ * EXAMPLE QUERIES FOR APACHE DRILL:
+ *      /opt/mapr/drill/drill-1.6.0/bin/sqlline -u jdbc:drill:
+ *          SELECT * FROM dfs.`/mapr/ian.cluster.com/user/mapr/ticktable`;
+ *          SELECT * FROM dfs.`/user/mapr/ticktable`;
+ *
+ *****************************************************************************/
+
+import org.apache.htrace.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -50,7 +71,7 @@ public class Persister {
         topics.add(topic);
 
         // subscribe to the raw data
-        System.out.println("subscribing to " + topic);
+        System.out.println("Subscribing to " + topic);
         consumer.subscribe(topics);
 
         // delete the old table if it's there
@@ -67,7 +88,7 @@ public class Persister {
 
         // request everything
         for (;;) {
-            ConsumerRecords<String, String> msg = consumer.poll(TIMEOUT);
+            ConsumerRecords<String, byte[]> msg = consumer.poll(TIMEOUT);
             if (msg.count() == 0) {
                 System.out.println("No messages after 1 second wait.");
             } else {
@@ -76,22 +97,18 @@ public class Persister {
 
                 // Iterate through returned records, extract the value
                 // of each message, and print the value to standard output.
-                Iterator<ConsumerRecord<String, String>> iter = msg.iterator();
+                Iterator<ConsumerRecord<String, byte[]>> iter = msg.iterator();
                 while (iter.hasNext()) {
-                    ConsumerRecord<String, String> record = iter.next();
+                    ConsumerRecord<String, byte[]> record = iter.next();
 
-                    // XXX won't have this problem when string is encoded correctly - just
-                    // XXX for testing
-                    String cleaned = record.value().replaceAll("\\p{Cntrl}", ""); 
-
-                    // use the _id field in the msg
-                    Document document = MapRDB.newDocument(cleaned);
+                    Tick tick = new Tick(record.value());
+                    Document document = MapRDB.newDocument((Object)tick);
 
                     String this_sym = document.getString("symbol");
                     syms.add(this_sym);
 
                     // save document into the table
-                    table.insertOrReplace(document);
+                    table.insertOrReplace(tick.getTradeSequenceNumber(), document);
                 }
             }
 
@@ -122,7 +139,7 @@ public class Persister {
                 "org.apache.kafka.common.serialization.StringDeserializer");
         //  which class to use to deserialize the value of each message
         props.put("value.deserializer",
-                "org.apache.kafka.common.serialization.StringDeserializer");
+                "org.apache.kafka.common.serialization.ByteArrayDeserializer");
 
         consumer = new KafkaConsumer<String, String>(props);
     }
