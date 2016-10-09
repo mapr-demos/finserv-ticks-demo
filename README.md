@@ -4,10 +4,6 @@ This project provides a processing engine for ingesting real time streams of NYS
 
 This project handles the Daily Trades dataset described [here](http://www.nyxdata.com/Data-Products/Daily-TAQ). The schema for our data is detailed in Table 6, "Daily Trades File Data Fields", on page 26 of [Daily TAQ Client Specification (from December 1st, 2013)](http://www.nyxdata.com/doc/212759).
 
-<div id="animation_hype_container" style="margin:auto;position:relative;width:600px;height:400px;overflow:hidden;" aria-live="polite">
-		<script type="text/javascript" charset="utf-8" src="animation.hyperesources/animation_hype_generated_script.js?27606"></script>
-</div>
-
 ## Pre-requisites
 
 To start, you need to get a MapR 5.1 running. You can install your own cluster or download a sandbox.
