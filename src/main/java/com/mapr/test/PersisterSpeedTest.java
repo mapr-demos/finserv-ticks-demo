@@ -94,59 +94,32 @@ public class PersisterSpeedTest {
         long last_update = 0;
         long startTime = System.nanoTime();
         Integer[] partitions = {0, 0, 0};
-        try {
-            while (true) {
-                // Request unread messages from the topic.
-                ConsumerRecords<String, byte[]> records = consumer.poll(pollTimeOut);
-                long current_time = System.nanoTime();
-                double elapsed_time = (current_time - start_time)/1e9;
-                if (records.count() == 0) {
-                    System.out.println("No messages after " + pollTimeOut / 1000 + "s. Total msgs consumed = " +
-                            records_consumed + ". Duration =" + Math.round(elapsed_time) + "s. Average ingest rate = " + Math.round(records_consumed / elapsed_time / 1000) + "Kmsgs/s");
-                }
-                if (records.count() > 0) {
-                    if (printme == false) {
-                        start_time = current_time;
-                        last_update = 0;
-                        records_consumed = 0;
-                        printme = true;
-                    }
-                    for (ConsumerRecord<String, byte[]> record : records) {
-                        records_consumed++;
-                        partitions[record.partition()] = 1;
-                        if (tableName.length()>0) {
-                            Tick tick = new Tick(record.value());
-                            Document document = MapRDB.newDocument((Object)tick);
-                            table.insertOrReplace(tick.getTradeSequenceNumber(), document);
-                        }
-                    }
+        // Request messages from the topic.
+        long current_time = System.nanoTime();
+        ConsumerRecords<String, byte[]> records = consumer.poll(pollTimeOut);
+        for (ConsumerRecord<String, byte[]> record : records) {
 
-                    // Print performance stats once per second
-                    if ((Math.floor(current_time - start_time)/1e9) > last_update)
-                    {
-                        last_update ++;
+            Tick tick = new Tick(record.value());
+            start_time = current_time;
+            last_update = 0;
+            records_consumed = 0;
 
-                        System.out.printf("t = %d. Total msgs consumed = %d. Average ingest rate = %.3f Kmsgs/s. Partitions = %s\n",  Math.round(elapsed_time), records_consumed, records_consumed / elapsed_time / 1000, Arrays.toString(partitions));
-//                        System.out.println("t = " + Math.round(elapsed_time) + ". Total msgs consumed = " + records_consumed + ". Average ingest rate = " + Math.round(records_consumed / elapsed_time / 1000) + "Kmsgs/s. Partitions = " + Arrays.toString(partitions));
-                        Integer[] tmp = {0,0,0};
-                        partitions = tmp;
-                    }
-
-                    consumer.commitSync();
+            // I just want to measure MapR-DB thruput by itself (excluding consumer.poll time)
+            // so I just send the same record over and over again, here:
+            while (records_consumed < Long.MAX_VALUE) {
+                Document document = MapRDB.newDocument((Object) tick);
+                table.insert(Long.toString(records_consumed), document);
+                records_consumed++;
+                current_time = System.nanoTime();
+                if ((Math.floor(current_time - start_time)/1e9) > last_update)
+                {
+                    last_update ++;
+                    double elapsed_time = (current_time - start_time)/1e9;
+                    System.out.printf("t = %d. Total msgs consumed = %d. Average ingest rate = %.3f Kmsgs/s. Partitions = %s\n",  Math.round(elapsed_time), records_consumed, records_consumed / elapsed_time / 1000, Arrays.toString(partitions));
                 }
 
             }
-
-
-
-        } catch (Throwable throwable) {
-            System.err.printf("%s", throwable.getStackTrace());
-        } finally {
-            System.out.println("Consumed " + records_consumed + " messages.");
-            System.out.println("Finished.");
-            consumer.close();
         }
-
 
     }
 
