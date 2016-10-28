@@ -165,7 +165,7 @@ public class ThreadCountSpeedTest {
             batchStart = t;
             // i = number of messages sent)
             // t = total elapsed time
-            // i/t = throughput (number of batches sent overall per second)
+            // i/t = throughput (number of messages sent overall per second)
             // dt = elapsed time for this batch
             // batch / dt = millions of messages sent per second for this batch
             data.printf("%d,%d,%d,%.3f,%.1f,%.3f,%.1f\n", threadCount, topicCount, i, t, i / t, dt, BATCH_SIZE / dt);
