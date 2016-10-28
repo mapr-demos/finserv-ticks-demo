@@ -26,3 +26,13 @@ abline(v=6.5, col='lightgray')
 abline(v=12.5, col='lightgray')
 abline(v=18.5, col='lightgray')
 dev.off()
+
+
+png(file="maprdb-count.png", width=800, height=500, pointsize=16)
+x = read.csv("maprdb-count.csv")
+boxplot(batchRate ~ messageSize + bufferWrite, x, xlab=c("Message Size (Bytes)"),
+	ylab="Messages / second", ylim=c(0,800),
+	col=rainbow(3)[ceiling((1:2))], xaxt='n')
+axis(1,labels=as.character(rep(c(10,100,500,1000, 2000, 5000, 10000),6)), at=(1:42), las=3)
+legend(x=1,y=760,legend=c("disabled", "enabled"), col=rainbow(2), fill=rainbow(4), title="bufferWrite")
+dev.off()
