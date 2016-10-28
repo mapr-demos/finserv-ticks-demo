@@ -163,7 +163,7 @@ public class ThreadCountSpeedTest {
             double t = System.nanoTime() * 1e-9 - t0;
             double dt = t - batchStart;
             batchStart = t;
-            // i = number of batches (number of "1 million messages" sent)
+            // i = number of messages sent)
             // t = total elapsed time
             // i/t = throughput (number of batches sent overall per second)
             // dt = elapsed time for this batch
