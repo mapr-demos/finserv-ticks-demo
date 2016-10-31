@@ -12,6 +12,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.ojai.Document;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -25,8 +27,9 @@ import java.util.concurrent.*;
  */
 @RunWith(Parameterized.class)
 public class MaprDbSpeedTest {
+    private static final Logger LOG = LoggerFactory.getLogger(MaprDbSpeedTest.class);
     private static final double TIMEOUT = 30;  // seconds
-    private static final int BATCH_SIZE = 100;  // The unit of measure for throughput is "batch size" per second
+    private static final int BATCH_SIZE = 1000;  // The unit of measure for throughput is "batch size" per second
     // e.g. Throughput = X "hundreds of messages" per sec
 
     @BeforeClass
@@ -69,12 +72,10 @@ public class MaprDbSpeedTest {
     private static class Sender extends Thread {
         private final BlockingQueue<Document> queue;
         private final Table table;
-        private int id;
 
-        private Sender(int id, Table table, BlockingQueue<Document> queue) {
+        private Sender(Table table, BlockingQueue<Document> queue) {
             this.queue = queue;
             this.table = table;
-            this.id = id;
         }
 
         @Override
@@ -83,18 +84,18 @@ public class MaprDbSpeedTest {
             try {
                 Document doc = queue.take();
                 while (doc != end) {
-                    table.insert(this.getName()+"-"+Long.toString(++count), doc);
+                    table.insertOrReplace(this.getName()+"-"+Long.toString(++count), doc);
                     doc = queue.take();
                 }
             } catch (InterruptedException e) {
-                System.out.printf("%s: Interrupted\n", this.getName());
+                LOG.error(this.getName() + ": Interrupted\n");
             }
         }
     }
 
     @Test
     public void testThreads() throws Exception {
-        System.out.printf("messageSize = %d, threadCount = %d\n", messageSize, threadCount);
+        LOG.info("messageSize = " + messageSize + ", threadCount = " + threadCount + "\n");
 
         // Test with BUFFERWRITE enabled:
         Boolean bufferwrite = true;
@@ -106,8 +107,7 @@ public class MaprDbSpeedTest {
             MapRDB.deleteTable(tableName);
         }
         // make a new table
-        Table table = MapRDB.createTable(tableName);
-        table.setOption(Table.TableOption.BUFFERWRITE, bufferwrite);
+        MapRDB.createTable(tableName);
 
         String tick_data = "080845201DAA                T 00000000400000088400N0000000070800014CT10011007100510061007";
         char[] space = new char[messageSize - tick_data.length()];
@@ -126,10 +126,12 @@ public class MaprDbSpeedTest {
             // We use this type not for concurrency reasons (although it is thread safe) but
             // rather because it provides an efficient way for senders to take messages if
             // they're available and for us to generate those messages (see below).
-            BlockingQueue<Document> q = new ArrayBlockingQueue<>(1000);
+            BlockingQueue<Document> q = new ArrayBlockingQueue<>(BATCH_SIZE*2);
             queues.add(q);
+            Table table = MapRDB.getTable(tableName);
+            table.setOption(Table.TableOption.BUFFERWRITE, bufferwrite);
             // spawn each thread with a reference to "q", which we'll add messages to later.
-            pool.submit(new Sender(i, table, q));
+            pool.submit(new Sender(table, q));
         }
 
         double t0 = System.nanoTime() * 1e-9;
@@ -159,7 +161,7 @@ public class MaprDbSpeedTest {
             // batch / dt = hundreds of messages sent per second for this batch
             data.printf("%d,%d,%d,%.3f,%.1f,%.3f,%.1f, %s\n", messageSize, threadCount, i, t, i / t, dt, BATCH_SIZE / dt, bufferwrite ? "true" : "false");
             if (t > TIMEOUT) {
-                System.out.println("\tbuffer = "+ bufferwrite +", messageSize = " + messageSize + ", Average tput = " + i/t);
+                LOG.info("buffer = "+ bufferwrite +", messageSize = " + messageSize + ", Average tput = " + i/t);
                 break;
             }
         }
