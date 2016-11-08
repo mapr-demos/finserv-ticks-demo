@@ -3,6 +3,7 @@ package com.mapr.demo.finserv;
 import org.apache.htrace.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.sql.hive.HiveContext;
 import org.apache.spark.streaming.kafka.v09.OffsetRange;
 import org.apache.spark.SparkConf;
@@ -120,14 +121,29 @@ public class SparkStreamingConsole {
                     kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
                     kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
 
-                    List<Tuple2<Long, Long>> timed_offsets = KafkaUtils.createRDD(
+//                    List<Tuple2<Long, Long>> timed_offsets = KafkaUtils.createRDD(
+//                            sc,
+//                            String.class,
+//                            String.class,
+//                            kafkaParams,
+//                            offsetRanges
+//                    ).map(record -> new Tuple2<Long, Long>(Long.parseLong(record._1), Long.parseLong(record._2))
+//                    ).collect();
+
+                    JavaPairRDD<String, String> rdd = KafkaUtils.createRDD(
                             sc,
                             String.class,
                             String.class,
                             kafkaParams,
                             offsetRanges
-                    ).map(record -> new Tuple2<Long, Long>(Long.parseLong(new String(record._1)), Long.parseLong(new String(record._2)))
-                    ).collect();
+                    );
+
+                    List<Tuple2<Long, Long>> timed_offsets = rdd.map(
+                            new Function<Tuple2<String,String>, Tuple2<Long, Long>>() {
+                                public Tuple2<Long, Long> call(Tuple2<String,String> record) {
+                                    return new Tuple2<Long, Long>(Long.parseLong(record._1), Long.parseLong(record._2));
+                                }
+                            }).collect();
 
                     for (int i = 0; i < timed_offsets.size() && !found; i++) {
                         Long timestamp = timed_offsets.get(i)._1;
