@@ -37,17 +37,19 @@ $ maprcli stream topic create -path /user/mapr/taq -topic trades -partitions 3
 Verify the topic was created successfully with this command:
 
 ```
-$ maprcli stream topic list -path /taq
+$ maprcli stream topic list -path /user/mapr/taq
 topic            partitions  logicalsize  consumers  maxlag  physicalsize
-trades           1           0            0          0       0
+trades           3           0            0          0       0
 ```
 
 ### Step 3: Create the MapR-DB table
 
+This step is optional.
 Create the table that will be used to persist parsed TAQ records consumed off the stream.
+$ maprcli table create -path /user/mapr/ticktable
 
 ```
-$ maprcli table info -path /apps/taq
+$ maprcli table info -path /user/mapr/ticktable
 ```
 
 ### Step 4: Compile and package up the example programs
@@ -56,7 +58,7 @@ Go back to the root directory where you have saved this source code and
 compile and build the program like this:
 
 ```
-$ cd nyse-taq-processing-pipline
+$ cd nyse-taq-streaming
 $ mvn package
 ...
 ```
@@ -67,8 +69,9 @@ The project create a jar with all external dependencies ( `./target/nyse-taq-str
 
 ### Step 5. Start the Spark to Hive Consumer
 
+
 ```
-$ /opt/mapr/spark/spark-1.6.1/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:trades
+$ $SPARK_HOME/bin/spark-submit --class com.mapr.demo.finserv.SparkStreamingToHive /mapr/ian.cluster.com/user/mapr/nyse-taq-streaming-1.0-jar-with-dependencies.jar /user/mapr/taq:trades
 ```
 
 ### Step 6: Run the Producer
@@ -79,13 +82,13 @@ or copy the jar file on your cluster (any node).
 For example copy the program to your server using scp:
 
 ```
-scp ./target/nyse-taq-streaming-1.0-jar-with-dependencies.jar mapr@<YOUR_MAPR_CLUSTER>:/home/mapr
+scp ./target/nyse-taq-streaming-1.0.jar mapr@<YOUR_MAPR_CLUSTER>:/home/mapr
 ```
 
 I prefer to use `rsync` instead of `scp` because it's faster:
 
 ```
-rsync -vapr --progress --stats --partial target/nyse-taq-streaming-1.0-jar-with-dependencies.jar mapr@10.200.1.101:~/
+rsync -vapr --progress --stats --partial target/nyse-taq-streaming-1.0.jar mapr@10.200.1.101:~/
 ```
 
 The producer will send a large number of messages to `/taq:trades`. Since there isn't
@@ -93,12 +96,12 @@ any consumer running yet, nobody will receive the messages.
 
 Then run the Producer like this:
 
-```java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run producer [source data file] [stream:topic]```
+```java -cp `mapr classpath`:./nyse-taq-streaming-1.0.jar com.mapr.demo.finserv.Run producer [source data file] [stream:topic]```
 
 For example,
 
 ```
-$ java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run producer data/taqtrade20131218 /usr/mapr/taq:trades 
+$ java -cp `mapr classpath`:./nyse-taq-streaming-1.0.jar com.mapr.demo.finserv.Run producer data/taqtrade20131218 /usr/mapr/taq:trades 
 Sent msg number 0
 Sent msg number 1000
 ...
@@ -113,12 +116,12 @@ The command-line argument `data/taqtrade20131218` refers to the source file cont
 
 In another window you can run the consumer using the following command:
 
-```java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer [stream:topic] [num_threads]```
+```java -cp `mapr classpath`:./nyse-taq-streaming-1.0.jar com.mapr.demo.finserv.Run consumer [stream:topic] [num_threads]```
 
 For example,
 
 ```
-$ java -cp `mapr classpath`:./nyse-taq-streaming-1.0-jar-with-dependencies.jar com.mapr.demo.finserv.Run consumer /user/mapr/taq:trades 2
+$ java -cp `mapr classpath`:./nyse-taq-streaming-1.0.jar com.mapr.demo.finserv.Run consumer /user/mapr/taq:trades 2
 Sent msg number 0
 Sent msg number 1000
 ...
@@ -167,7 +170,7 @@ $ maprcli stream topic info -path /user/mapr/taq -topic trades | tail -n 1 | awk
 When you are done, you can delete the stream, and all associated topic using the following command:
 
 ```
-$ maprcli stream delete -path /taq
+$ maprcli stream delete -path /user/mapr/taq
 ```
 
 Don't forget to recreate the stream before running the producer again.
