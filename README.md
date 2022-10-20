@@ -46,7 +46,11 @@ trades           3           0            0          0       0
 
 This step is optional.
 Create the table that will be used to persist parsed TAQ records consumed off the stream.
+```
 $ maprcli table create -path /user/mapr/ticktable
+```
+
+Verify the table is created with this command:
 
 ```
 $ maprcli table info -path /user/mapr/ticktable
